@@ -34,7 +34,7 @@ export function Dashboard() {
                     <p className="text-zinc-400 mt-1">Ivala Chimpedam lesgooo.</p>
                 </div>
 
-                <Card className="w-96 border-neon-400/20 bg-neon-400/5">
+                <Card className="w-96">
                     <div className="flex items-center justify-between mb-2">
                         <div className="flex items-center gap-2">
                             <Trophy className="w-5 h-5 text-neon-400" />

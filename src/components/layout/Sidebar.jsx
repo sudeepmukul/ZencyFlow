@@ -16,11 +16,16 @@ const navItems = [
 
 export function Sidebar() {
     return (
-        <aside className="w-64 h-screen bg-zinc-950 border-r border-zinc-800 flex flex-col overflow-y-auto flex-shrink-0">
-            <div className="p-6">
-                <h1 className="text-2xl font-bold text-neon-400 tracking-tighter drop-shadow-[0_0_10px_rgba(251,255,0,0.3)]">
-                    ZencyFlow
-                </h1>
+        <aside className="w-64 h-screen flex flex-col overflow-y-auto flex-shrink-0 bg-transparent relative z-20">
+            <div className="p-8">
+                <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-neon-400 to-neon-600 flex items-center justify-center shadow-[0_0_15px_rgba(251,255,0,0.3)]">
+                        <LayoutDashboard className="w-5 h-5 text-black" />
+                    </div>
+                    <h1 className="text-xl font-bold text-white tracking-tight drop-shadow-md">
+                        ZencyFlow
+                    </h1>
+                </div>
             </div>
 
             <nav className="flex-1 px-4 space-y-2">
@@ -30,22 +35,30 @@ export function Sidebar() {
                         to={item.to}
                         className={({ isActive }) =>
                             cn(
-                                "flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 group",
+                                "flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 group border border-transparent",
                                 isActive
-                                    ? "bg-neon-400/10 text-neon-400 shadow-[0_0_15px_rgba(251,255,0,0.1)] border border-neon-400/20"
-                                    : "text-zinc-400 hover:bg-zinc-900 hover:text-zinc-100"
+                                    ? "bg-white/10 text-white shadow-[0_0_15px_rgba(251,255,0,0.1)] border-white/10 backdrop-blur-md"
+                                    : "text-zinc-400 hover:text-white hover:bg-white/5 hover:border-white/5"
                             )
                         }
                     >
-                        <item.icon className="w-5 h-5" />
+                        <item.icon className={({ isActive }) => cn("w-5 h-5 transition-colors", isActive ? "text-neon-400" : "group-hover:text-neon-400")} />
                         <span className="font-medium">{item.label}</span>
                     </NavLink>
                 ))}
             </nav>
 
-            <div className="p-6 border-t border-zinc-800">
-                <div className="text-xs text-zinc-500 text-center">
-                    v1.0.0 • Zency Leveling System
+            <div className="p-6">
+                <div className="glass-card p-4 rounded-xl flex items-center gap-3 cursor-pointer hover:bg-white/10 transition-colors">
+                    <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-neon-400 to-purple-500 p-[1px]">
+                        <div className="w-full h-full rounded-full bg-black flex items-center justify-center">
+                            <span className="font-bold text-xs text-neon-400">ZF</span>
+                        </div>
+                    </div>
+                    <div className="overflow-hidden">
+                        <p className="text-sm font-semibold text-white truncate">Zency User</p>
+                        <p className="text-xs text-zinc-400 truncate">Level 1 • Novice</p>
+                    </div>
                 </div>
             </div>
         </aside>

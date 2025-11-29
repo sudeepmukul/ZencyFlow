@@ -54,10 +54,12 @@ export function Layout() {
     }, [habits, habitLogs]);
 
     return (
-        <div className="flex h-screen bg-black text-white overflow-hidden font-sans selection:bg-neon-500/30">
+        <div className="flex h-screen text-white overflow-hidden font-sans selection:bg-neon-500/30 relative">
+            <div className="breathing-bg"></div>
+
             <Sidebar />
-            <main className="flex-1 overflow-y-auto bg-zinc-950 p-8">
-                <div className="max-w-7xl mx-auto">
+            <main className="flex-1 overflow-y-auto glass-panel m-4 rounded-[30px] border border-white/10 relative z-10">
+                <div className="max-w-7xl mx-auto p-8">
                     <Outlet />
                 </div>
             </main>
