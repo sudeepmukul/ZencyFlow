@@ -1,57 +1,89 @@
-import React, { useEffect } from 'react';
-import { Sidebar } from './Sidebar';
+import React, { useEffect, useRef } from 'react';
 import { Outlet } from 'react-router-dom';
+import { Sidebar } from './Sidebar';
 import { TimerWidget } from '../timer/TimerWidget';
 import { CheckInModal } from '../timer/CheckInModal';
-import { NotificationManager } from '../../lib/notifications';
 import { useData } from '../../contexts/DataContext';
+import { NotificationManager } from '../../lib/notifications';
 
 export function Layout() {
-    const { habits, habitLogs } = useData();
+    const { tasks, habits, habitLogs } = useData();
+    const lastNotificationRef = useRef({});
 
-    // Notification Logic
     useEffect(() => {
-        const checkReminders = () => {
+        NotificationManager.requestPermission();
+    }, []);
+
+    useEffect(() => {
+        const checkNotifications = () => {
             const now = new Date();
             const hour = now.getHours();
             const minute = now.getMinutes();
             const today = now.toISOString().split('T')[0];
+            const timeKey = `${today}-${hour}`;
 
-            // Daily Habit Reminder (8 PM)
-            if (hour === 20 && minute === 0) {
-                const incompleteHabits = habits.filter(h =>
-                    !habitLogs.some(l => l.habitId === h.id && l.date === today)
-                );
+            // Prevent duplicate notifications in the same hour block
+            if (lastNotificationRef.current[timeKey]) return;
 
-                if (incompleteHabits.length > 0) {
-                    NotificationManager.send("Daily Habit Check 🌙", {
-                        body: `You have ${incompleteHabits.length} habits left for today. Keep your streak alive!`,
-                        tag: 'daily-reminder'
+            // 1. Daily Summary (08:00)
+            if (hour === 8 && minute === 0) {
+                const pendingTasks = tasks.filter(t => t.status !== 'completed').length;
+                if (pendingTasks > 0) {
+                    NotificationManager.send("Good Morning! ☀️", {
+                        body: `You have ${pendingTasks} tasks pending for today. Let's crush it!`
                     });
+                    lastNotificationRef.current[timeKey] = true;
                 }
             }
 
-            // Streak Warning (10 PM)
-            if (hour === 22 && minute === 0) {
-                const atRiskHabits = habits.filter(h =>
-                    h.streak > 0 &&
-                    !habitLogs.some(l => l.habitId === h.id && l.date === today)
+            // 2. Overdue Tasks (09:00)
+            if (hour === 9 && minute === 0) {
+                const overdueTasks = tasks.filter(t =>
+                    t.status !== 'completed' &&
+                    t.dueDate &&
+                    new Date(t.dueDate) < new Date().setHours(0, 0, 0, 0)
                 );
+
+                if (overdueTasks.length > 0) {
+                    NotificationManager.send("Overdue Tasks ⚠️", {
+                        body: `You have ${overdueTasks.length} overdue tasks. Time to catch up!`
+                    });
+                    lastNotificationRef.current[timeKey] = true;
+                }
+            }
+
+            // 3. Daily Habit Check (20:00)
+            if (hour === 20 && minute === 0) {
+                const completedHabits = habitLogs.filter(l => l.date === today).length;
+                const remaining = habits.length - completedHabits;
+
+                if (remaining > 0) {
+                    NotificationManager.send("Evening Check-in 🌙", {
+                        body: `You still have ${remaining} habits to complete today. Keep the streak alive!`
+                    });
+                    lastNotificationRef.current[timeKey] = true;
+                }
+            }
+
+            // 4. Streak Warning (22:00)
+            if (hour === 22 && minute === 0) {
+                const completedHabitIds = habitLogs.filter(l => l.date === today).map(l => l.habitId);
+                const atRiskHabits = habits.filter(h => !completedHabitIds.includes(h.id) && h.streak > 0);
 
                 if (atRiskHabits.length > 0) {
                     NotificationManager.send("Streak Warning! 🔥", {
-                        body: `Don't lose your streak! You have ${atRiskHabits.length} habits at risk.`,
-                        tag: 'streak-warning',
-                        requireInteraction: true
+                        body: `Don't lose your streak in ${atRiskHabits[0].title}${atRiskHabits.length > 1 ? ' and others' : ''}!`
                     });
+                    lastNotificationRef.current[timeKey] = true;
                 }
             }
         };
 
-        // Check every minute
-        const interval = setInterval(checkReminders, 60000);
+        const interval = setInterval(checkNotifications, 60000); // Check every minute
+        checkNotifications(); // Run immediately
+
         return () => clearInterval(interval);
-    }, [habits, habitLogs]);
+    }, [tasks, habits, habitLogs]);
 
     return (
         <div className="flex h-screen text-white overflow-hidden font-sans selection:bg-neon-500/30 relative">

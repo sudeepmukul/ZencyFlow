@@ -72,8 +72,29 @@ export function Dashboard() {
                         <Target className="w-6 h-6" />
                     </div>
                     <div>
-                        <div className="text-2xl font-bold text-white">{Math.round((tasks.filter(t => t.status === 'completed').length / (tasks.length || 1)) * 100)}%</div>
-                        <div className="text-sm text-zinc-400">Productivity</div>
+                        <div className="text-2xl font-bold text-white">
+                            {(() => {
+                                // Today's Productivity
+                                const completedToday = tasks.filter(t => t.status === 'completed' && t.completedAt?.startsWith(today)).length;
+                                const createdToday = tasks.filter(t => {
+                                    if (!t.createdAt) return false;
+                                    const createdDate = new Date(t.createdAt).toISOString().split('T')[0];
+                                    return createdDate === today;
+                                }).length;
+
+                                const pendingToday = tasks.filter(t => {
+                                    if (t.status === 'completed' || !t.createdAt) return false;
+                                    const createdDate = new Date(t.createdAt).toISOString().split('T')[0];
+                                    return createdDate === today;
+                                }).length;
+
+                                const totalForToday = completedToday + pendingToday;
+
+                                if (totalForToday === 0) return '0%';
+                                return `${Math.round((completedToday / totalForToday) * 100)}%`;
+                            })()}
+                        </div>
+                        <div className="text-sm text-zinc-400">Today's Productivity</div>
                     </div>
                 </Card>
 
@@ -124,6 +145,57 @@ export function Dashboard() {
                     <div>
                         <div className="text-2xl font-bold text-white">{habits.filter(h => h.streak > 0).length}</div>
                         <div className="text-sm text-zinc-400">Active Streaks</div>
+                    </div>
+                </Card>
+
+                {/* Weekly Productivity */}
+                <Card className="flex items-center gap-4">
+                    <div className="p-3 bg-orange-500/10 rounded-xl text-orange-400">
+                        <Target className="w-6 h-6" />
+                    </div>
+                    <div>
+                        <div className="text-2xl font-bold text-white">
+                            {(() => {
+                                const now = new Date();
+                                const startOfWeek = new Date(now.setDate(now.getDate() - now.getDay()));
+                                startOfWeek.setHours(0, 0, 0, 0);
+
+                                const completedThisWeek = tasks.filter(t => t.status === 'completed' && new Date(t.completedAt) >= startOfWeek).length;
+                                const createdThisWeek = tasks.filter(t => new Date(t.createdAt) >= startOfWeek).length;
+
+                                // Total tasks handled this week (created + completed) - intersection?
+                                // Let's simplify: Completed This Week / (Active Created This Week + Completed This Week)
+                                const pendingCreatedThisWeek = tasks.filter(t => t.status !== 'completed' && new Date(t.createdAt) >= startOfWeek).length;
+                                const totalWeek = completedThisWeek + pendingCreatedThisWeek;
+
+                                if (totalWeek === 0) return '0%';
+                                return `${Math.round((completedThisWeek / totalWeek) * 100)}%`;
+                            })()}
+                        </div>
+                        <div className="text-sm text-zinc-400">Weekly Productivity</div>
+                    </div>
+                </Card>
+
+                {/* Monthly Productivity */}
+                <Card className="flex items-center gap-4">
+                    <div className="p-3 bg-teal-500/10 rounded-xl text-teal-400">
+                        <Target className="w-6 h-6" />
+                    </div>
+                    <div>
+                        <div className="text-2xl font-bold text-white">
+                            {(() => {
+                                const now = new Date();
+                                const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+                                const completedThisMonth = tasks.filter(t => t.status === 'completed' && new Date(t.completedAt) >= startOfMonth).length;
+                                const pendingCreatedThisMonth = tasks.filter(t => t.status !== 'completed' && new Date(t.createdAt) >= startOfMonth).length;
+                                const totalMonth = completedThisMonth + pendingCreatedThisMonth;
+
+                                if (totalMonth === 0) return '0%';
+                                return `${Math.round((completedThisMonth / totalMonth) * 100)}%`;
+                            })()}
+                        </div>
+                        <div className="text-sm text-zinc-400">Monthly Productivity</div>
                     </div>
                 </Card>
             </div>

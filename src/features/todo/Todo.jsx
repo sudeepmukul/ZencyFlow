@@ -3,11 +3,18 @@ import { useData } from '../../contexts/DataContext';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Input, Select } from '../../components/ui/Input';
-import { Plus, GripVertical, CheckCircle, Calendar, Trash2, Play } from 'lucide-react';
+import { Plus, GripVertical, CheckCircle, Calendar, Trash2, Play, AlertCircle, Clock } from 'lucide-react';
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { cn } from '../../lib/utils';
+
+// Priority Colors
+const PRIORITY_COLORS = {
+    High: 'text-red-400 border-red-400/20 bg-red-400/10',
+    Medium: 'text-yellow-400 border-yellow-400/20 bg-yellow-400/10',
+    Low: 'text-green-400 border-green-400/20 bg-green-400/10',
+};
 
 // Sortable Item Component
 function SortableTaskItem({ task, onToggle, onDelete, onMoveToNextDay, onStartTimer, activeTimer, totalDuration }) {
@@ -29,21 +36,41 @@ function SortableTaskItem({ task, onToggle, onDelete, onMoveToNextDay, onStartTi
         return `${m}m`;
     };
 
+    const isOverdue = task.dueDate && new Date(task.dueDate) < new Date().setHours(0, 0, 0, 0) && task.status !== 'completed';
+
     return (
         <div ref={setNodeRef} style={style} className={cn("mb-3", isDragging && "opacity-50")}>
             <Card className={cn(
                 "p-4 flex items-center gap-4 transition-all group",
-                isActive ? "bg-neon-400/5 border-neon-400/30" : "bg-zinc-900/80 hover:border-neon-400/30"
+                isActive ? "bg-neon-400/5 border-neon-400/30" : "bg-zinc-900/80 hover:border-neon-400/30",
+                isOverdue && "border-red-500/30 bg-red-500/5"
             )}>
                 <div {...attributes} {...listeners} className="cursor-grab active:cursor-grabbing text-zinc-600 hover:text-zinc-400">
                     <GripVertical className="w-5 h-5" />
                 </div>
 
                 <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-1">
+                    <div className="flex items-center gap-2 mb-1 flex-wrap">
                         <h3 className={cn("font-medium", isActive ? "text-neon-400" : "text-white")}>
                             {task.title}
                         </h3>
+
+                        {/* Priority Badge */}
+                        <span className={cn("text-[10px] px-1.5 py-0.5 rounded border font-medium", PRIORITY_COLORS[task.priority || 'Medium'])}>
+                            {task.priority || 'Medium'}
+                        </span>
+
+                        {/* Due Date Badge */}
+                        {task.dueDate && (
+                            <span className={cn(
+                                "text-[10px] px-1.5 py-0.5 rounded border flex items-center gap-1",
+                                isOverdue ? "text-red-400 border-red-400/20 bg-red-400/10" : "text-zinc-400 border-zinc-700 bg-zinc-800"
+                            )}>
+                                <Calendar className="w-3 h-3" />
+                                {new Date(task.dueDate).toLocaleDateString()}
+                            </span>
+                        )}
+
                         {task.notes && (
                             <span className="text-xs text-zinc-500 truncate max-w-[200px]" title={task.notes}>
                                 - {task.notes}
@@ -95,7 +122,10 @@ export function Todo() {
     const [newTaskCategory, setNewTaskCategory] = useState('General');
     const [newTaskXP, setNewTaskXP] = useState(20);
     const [newTaskNotes, setNewTaskNotes] = useState('');
+    const [newTaskPriority, setNewTaskPriority] = useState('Medium');
+    const [newTaskDueDate, setNewTaskDueDate] = useState('');
     const [filterCategory, setFilterCategory] = useState('All');
+    const [sortBy, setSortBy] = useState('Priority'); // 'Priority' or 'Order'
 
     const sensors = useSensors(
         useSensor(PointerSensor),
@@ -105,7 +135,15 @@ export function Todo() {
     const activeTasks = tasks
         .filter(t => t.status !== 'completed')
         .filter(t => filterCategory === 'All' || t.category === filterCategory)
-        .sort((a, b) => (a.order || 0) - (b.order || 0));
+        .sort((a, b) => {
+            if (sortBy === 'Priority') {
+                const priorityOrder = { High: 3, Medium: 2, Low: 1 };
+                const pA = priorityOrder[a.priority || 'Medium'];
+                const pB = priorityOrder[b.priority || 'Medium'];
+                if (pA !== pB) return pB - pA; // Higher priority first
+            }
+            return (a.order || 0) - (b.order || 0);
+        });
 
     const completedTasks = tasks
         .filter(t => t.status === 'completed')
@@ -131,7 +169,7 @@ export function Todo() {
 
             const newOrder = arrayMove(activeTasks, oldIndex, newIndex);
 
-            // Update order in DB (optimistic UI update could be better but keeping it simple)
+            // Update order in DB
             newOrder.forEach((task, index) => {
                 updateTask({ ...task, order: index });
             });
@@ -147,11 +185,15 @@ export function Todo() {
             category: newTaskCategory,
             xpValue: parseInt(newTaskXP),
             notes: newTaskNotes,
+            priority: newTaskPriority,
+            dueDate: newTaskDueDate || null,
             order: activeTasks.length, // Append to end
         });
         setNewTaskTitle('');
         setNewTaskNotes('');
         setNewTaskXP(20);
+        setNewTaskPriority('Medium');
+        setNewTaskDueDate('');
     };
 
     const handleMoveToNextDay = async (task) => {
@@ -163,6 +205,14 @@ export function Todo() {
             <div className="flex items-center justify-between">
                 <h1 className="text-3xl font-bold text-white">Tasks</h1>
                 <div className="flex items-center gap-4">
+                    <Select
+                        value={sortBy}
+                        onChange={e => setSortBy(e.target.value)}
+                        className="bg-zinc-900 border-zinc-700 text-sm py-1 h-8 w-32"
+                    >
+                        <option value="Priority">Sort: Priority</option>
+                        <option value="Order">Sort: Manual</option>
+                    </Select>
                     <Select
                         value={filterCategory}
                         onChange={e => setFilterCategory(e.target.value)}
@@ -186,8 +236,8 @@ export function Todo() {
             {/* Add Task Form */}
             <Card className="p-4">
                 <form onSubmit={handleAddTask} className="space-y-4">
-                    <div className="flex gap-4 items-end">
-                        <div className="flex-1">
+                    <div className="flex gap-4 items-end flex-wrap">
+                        <div className="flex-1 min-w-[200px]">
                             <label className="block text-xs font-medium text-zinc-500 mb-1">Task Title</label>
                             <Input
                                 value={newTaskTitle}
@@ -212,8 +262,29 @@ export function Todo() {
                                 ))}
                             </Select>
                         </div>
-                        <div className="w-24">
-                            <label className="block text-xs font-medium text-zinc-500 mb-1">XP Value</label>
+                        <div className="w-28">
+                            <label className="block text-xs font-medium text-zinc-500 mb-1">Priority</label>
+                            <Select
+                                value={newTaskPriority}
+                                onChange={e => setNewTaskPriority(e.target.value)}
+                                className="bg-zinc-950 border-zinc-800"
+                            >
+                                <option value="High">High</option>
+                                <option value="Medium">Medium</option>
+                                <option value="Low">Low</option>
+                            </Select>
+                        </div>
+                        <div className="w-36">
+                            <label className="block text-xs font-medium text-zinc-500 mb-1">Due Date</label>
+                            <Input
+                                type="date"
+                                value={newTaskDueDate}
+                                onChange={e => setNewTaskDueDate(e.target.value)}
+                                className="bg-zinc-950 border-zinc-800 text-sm"
+                            />
+                        </div>
+                        <div className="w-20">
+                            <label className="block text-xs font-medium text-zinc-500 mb-1">XP</label>
                             <Input
                                 type="number"
                                 value={newTaskXP}
