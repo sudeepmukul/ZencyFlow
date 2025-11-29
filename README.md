@@ -1,11 +1,6 @@
-# 🌊 ZencyFlow
+ ZencyFlow
 
 **ZencyFlow** is a premium, gamified productivity application designed to help you manage your life with style and efficiency. Built with a "local-first" philosophy, it combines powerful task management, habit tracking, and goal setting with a stunning glassmorphic UI and engaging gamification elements.
-
-![ZencyFlow Banner](https://via.placeholder.com/1200x400?text=ZencyFlow+Dashboard+Preview)
-*(Replace with actual screenshot)*
-
----
 
 ## 🚀 Features
 
