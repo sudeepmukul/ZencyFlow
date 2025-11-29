@@ -1,0 +1,348 @@
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { db } from '../lib/db';
+import { useUser } from './UserContext';
+
+// Track stopped timer IDs to prevent duplicate stops
+const stoppedTimerIds = new Set();
+
+const DataContext = createContext();
+
+export const DataProvider = ({ children }) => {
+    const { user, addXP, updateProfile } = useUser();
+    const [goals, setGoals] = useState([]);
+    const [habits, setHabits] = useState([]);
+    const [tasks, setTasks] = useState([]);
+    const [sleepLogs, setSleepLogs] = useState([]);
+    const [journalEntries, setJournalEntries] = useState([]);
+    const [habitLogs, setHabitLogs] = useState([]);
+    const [timerLogs, setTimerLogs] = useState([]);
+
+    const [categories, setCategories] = useState([]);
+
+    const refreshData = useCallback(async () => {
+        try {
+            const [
+                fetchedGoals,
+                fetchedHabits,
+                fetchedTasks,
+                fetchedSleep,
+                fetchedJournal,
+                fetchedHabitLogs,
+                fetchedCategories
+            ] = await Promise.all([
+                db.getAll('goals'),
+                db.getAll('habits'),
+                db.getAll('tasks'),
+                db.getAll('sleep_logs'),
+                db.getAll('journal_entries'),
+                db.getAll('habit_logs'),
+                db.getAll('categories')
+            ]);
+
+            // Auto-cleanup: Delete completed tasks older than 4 days
+            const fourDaysAgo = new Date();
+            fourDaysAgo.setDate(fourDaysAgo.getDate() - 4);
+
+            const tasksToDelete = (fetchedTasks || []).filter(task =>
+                task.status === 'completed' &&
+                task.completedAt &&
+                new Date(task.completedAt) < fourDaysAgo
+            );
+
+            // Delete old completed tasks
+            for (const task of tasksToDelete) {
+                await db.delete('tasks', task.id);
+            }
+
+            // Filter out deleted tasks from the state
+            const activeTasks = (fetchedTasks || []).filter(task =>
+                !(task.status === 'completed' && task.completedAt && new Date(task.completedAt) < fourDaysAgo)
+            );
+
+            setGoals(fetchedGoals || []);
+            setHabits(fetchedHabits || []);
+            setTasks(activeTasks);
+            setSleepLogs(fetchedSleep || []);
+            setJournalEntries(fetchedJournal || []);
+            setHabitLogs(fetchedHabitLogs || []);
+            setCategories(fetchedCategories || []);
+
+            const fetchedTimerLogs = await db.getAll('timer_logs');
+            setTimerLogs(fetchedTimerLogs || []);
+        } catch (error) {
+            console.error("Failed to refresh data:", error);
+        }
+    }, []);
+
+    useEffect(() => {
+        refreshData();
+    }, [refreshData]);
+
+    // --- Categories ---
+    const addCategory = async (name) => {
+        await db.add('categories', { name, createdAt: new Date() });
+        await refreshData();
+    };
+
+    const deleteCategory = async (id) => {
+        await db.delete('categories', id);
+        await refreshData();
+    };
+
+    // --- Goals ---
+    const addGoal = async (goal) => {
+        await db.add('goals', { ...goal, createdAt: new Date() });
+        await refreshData();
+    };
+
+    const updateGoal = async (goal) => {
+        await db.put('goals', goal);
+        await refreshData();
+    };
+
+    const deleteGoal = async (id) => {
+        await db.delete('goals', id);
+        await refreshData();
+    };
+
+    // --- Habits ---
+    const addHabit = async (habit) => {
+        await db.add('habits', { ...habit, streak: 0, longestStreak: 0, createdAt: new Date() });
+        await refreshData();
+    };
+
+    const toggleHabit = async (habitId, date) => {
+        // Fetch fresh logs to ensure accuracy
+        const allLogs = await db.getAll('habit_logs');
+        const existing = allLogs.find(log => log.habitId === habitId && log.date === date);
+
+        // Calculate dynamic XP: 100 XP pool divided by number of habits (min 5 XP)
+        const habitXP = Math.max(5, Math.floor(100 / habits.length));
+
+        if (existing) {
+            // UNDO: Delete log
+            await db.delete('habit_logs', existing.id);
+            await addXP(-habitXP); // Remove dynamic XP
+        } else {
+            // DO: Add log
+            await db.add('habit_logs', { habitId, date });
+            await addXP(habitXP); // Add dynamic XP
+        }
+
+        // Recalculate Streak
+        const updatedLogs = await db.getAll('habit_logs');
+        const thisHabitLogs = updatedLogs.filter(l => l.habitId === habitId);
+        const sortedDates = thisHabitLogs.map(l => l.date).sort((a, b) => new Date(b) - new Date(a)); // Descending
+
+        let streak = 0;
+        const today = new Date().toISOString().split('T')[0];
+        const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+
+        // Check if streak is active (done today or yesterday)
+        let currentDate = null;
+        if (sortedDates.includes(today)) {
+            currentDate = today;
+        } else if (sortedDates.includes(yesterday)) {
+            currentDate = yesterday;
+        }
+
+        if (currentDate) {
+            streak = 1;
+            let checkDate = new Date(currentDate);
+            while (true) {
+                checkDate.setDate(checkDate.getDate() - 1);
+                const dateStr = checkDate.toISOString().split('T')[0];
+                if (sortedDates.includes(dateStr)) {
+                    streak++;
+                } else {
+                    break;
+                }
+            }
+        }
+
+        // Update Habit
+        const habit = habits.find(h => h.id === habitId);
+        if (habit) {
+            await db.put('habits', {
+                ...habit,
+                streak: streak,
+                longestStreak: Math.max(habit.longestStreak || 0, streak)
+            });
+        }
+
+        await refreshData();
+    };
+
+    const updateHabit = async (habit) => {
+        await db.put('habits', habit);
+        await refreshData();
+    };
+
+    const deleteHabit = async (id) => {
+        await db.delete('habits', id);
+        await refreshData();
+    };
+
+    // --- Tasks ---
+    const addTask = async (task) => {
+        await db.add('tasks', { ...task, status: 'pending', createdAt: new Date() });
+        await refreshData();
+    };
+
+    const updateTask = async (task) => {
+        await db.put('tasks', task);
+        await refreshData();
+    };
+
+    const toggleTask = async (taskId) => {
+        const task = tasks.find(t => t.id === taskId);
+        if (!task) return;
+
+        if (task.status === 'completed') {
+            // UNDO
+            await db.put('tasks', { ...task, status: 'pending', completedAt: null });
+            await addXP(-(task.xpValue || 20));
+        } else {
+            // COMPLETE
+            await db.put('tasks', { ...task, status: 'completed', completedAt: new Date().toISOString() });
+            await addXP(task.xpValue || 20);
+        }
+        await refreshData();
+    };
+
+    const deleteTask = async (id) => {
+        const task = tasks.find(t => t.id === id);
+
+        // If task was completed, deduct the XP before deleting
+        if (task && task.status === 'completed') {
+            await addXP(-(task.xpValue || 20));
+        }
+
+        await db.delete('tasks', id);
+        await refreshData();
+    };
+
+    // --- Sleep ---
+    const logSleep = async (entry) => {
+        await db.put('sleep_logs', entry);
+        await addXP(15);
+        await refreshData();
+    };
+
+    // --- Journal ---
+    const addJournalEntry = async (entry) => {
+        await db.add('journal_entries', { ...entry, createdAt: new Date() });
+        await addXP(15);
+        await refreshData();
+    };
+
+    const updateJournalEntry = async (entry) => {
+        await db.put('journal_entries', entry);
+        await refreshData();
+    };
+
+    const deleteJournalEntry = async (id) => {
+        await db.delete('journal_entries', id);
+        await refreshData();
+    };
+
+    const value = {
+        tasks,
+        goals,
+        habits,
+        habitLogs,
+        journalEntries,
+        sleepLogs,
+        categories,
+        addTask,
+        updateTask,
+        toggleTask,
+        deleteTask,
+        addGoal,
+        updateGoal,
+        deleteGoal,
+        addHabit,
+        updateHabit,
+        deleteHabit,
+        toggleHabit,
+        addJournalEntry,
+        updateJournalEntry,
+        deleteJournalEntry,
+        logSleep,
+        addCategory,
+        deleteCategory,
+        refreshData,
+        activeTimer: user.activeTimer || null,
+        timerLogs,
+        timerSettings: user.settings?.timer || { efficiency: 0.6, checkInInterval: 30 },
+        startTimer: async (taskId) => {
+            if (user.activeTimer) {
+                alert('Stop the current timer before starting a new one.');
+                return;
+            }
+
+            const task = tasks.find(t => t.id === taskId);
+            if (!task) return;
+
+            const newTimer = {
+                taskId,
+                taskTitle: task.title,
+                startTime: new Date().toISOString(),
+                duration: 0, // seconds
+                lastCheckIn: new Date().toISOString(),
+                isPaused: false,
+                checkIns: 0
+        resumeTimer: async () => {
+                    if (!user.activeTimer) return;
+                    await updateProfile({
+                        activeTimer: {
+                            ...user.activeTimer,
+                            isPaused: false,
+                            lastCheckIn: new Date().toISOString() // Reset check-in timer on resume
+                        }
+                    });
+                },
+                updateTimerDuration: async (additionalSeconds) => {
+                    if (!user.activeTimer || user.activeTimer.isPaused) return;
+
+                    await updateProfile({
+                        activeTimer: {
+                            ...user.activeTimer,
+                            duration: user.activeTimer.duration + additionalSeconds
+                        }
+                    });
+                },
+                checkIn: async () => {
+                    if (!user.activeTimer) return;
+                    await updateProfile({
+                        activeTimer: {
+                            ...user.activeTimer,
+                            lastCheckIn: new Date().toISOString(),
+                            checkIns: (user.activeTimer.checkIns || 0) + 1
+                        }
+                    });
+                },
+                updateTimerSettings: async (newSettings) => {
+                    await updateProfile({
+                        settings: {
+                            ...user.settings,
+                            timer: { ...user.settings?.timer, ...newSettings }
+                        }
+                    });
+                }
+            };
+
+            return (
+                <DataContext.Provider value={value}>
+                    {children}
+                </DataContext.Provider>
+            );
+        };
+
+        export const useData = () => {
+            const context = useContext(DataContext);
+            if (!context) {
+                throw new Error('useData must be used within a DataProvider');
+            }
+            return context;
+        };
