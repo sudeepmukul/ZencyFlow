@@ -1,0 +1,234 @@
+:root {
+    --zen-yellow: #FFFF00;
+    --zen-white: #FFFFFF;
+}
+
+.logo-wrapper {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%) scale(0.35);
+    /* Centered and scaled */
+    transform-origin: center center;
+
+    width: 400px;
+    /* Approximate width of unscaled logo */
+    height: 150px;
+    /* Approximate height of unscaled logo */
+
+    display: flex;
+    justify-content: center;
+    align-items: center;
+
+    cursor: pointer;
+    font-family: 'Kanit', sans-serif;
+}
+
+.zen-logo {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    position: relative;
+    z-index: 2;
+    width: max-content;
+}
+
+/* Top Row: ZEN + Hindi Text */
+.logo-top {
+    display: flex;
+    align-items: baseline;
+    font-size: 5rem;
+    font-weight: 900;
+    letter-spacing: -4px;
+    line-height: 0.7;
+    position: relative;
+    transform: translateX(-2px);
+    white-space: nowrap;
+}
+
+/* Individual Character Styling */
+.char-z {
+    color: var(--zen-yellow);
+    text-shadow: 4px 4px 0px rgba(0, 0, 0, 0.5);
+    opacity: 0;
+    transform: translateX(-50px);
+    animation: slideInLeft 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+    animation-delay: 0.2s;
+}
+
+.char-en {
+    color: var(--zen-white);
+    text-shadow: 4px 4px 0px rgba(0, 0, 0, 0.5);
+    opacity: 0;
+    transform: translateY(-50px);
+    animation: slideInDown 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+    animation-delay: 0.4s;
+    margin: 0 -2px;
+}
+
+.char-si {
+    font-family: 'Noto Sans Devanagari', sans-serif;
+    font-weight: 900;
+    color: var(--zen-yellow);
+    text-shadow: 4px 4px 0px rgba(0, 0, 0, 0.5);
+    opacity: 0;
+    filter: blur(10px);
+    animation: textGlitch 0.8s ease-out forwards;
+    animation-delay: 0.8s;
+
+    /* ALIGNMENT FIXES FOR HINDI CHAR */
+    /* Hindi chars are often smaller than Latin caps at same font-size */
+    font-size: 1.05em;
+    /* Nudge it up/down to align the top bar with ZEN */
+    transform: translateY(-2px);
+    margin-left: -2px;
+}
+
+/* Bottom Row: FLOW */
+.logo-bottom {
+    font-size: 5rem;
+    font-weight: 900;
+    color: var(--zen-white);
+    text-transform: uppercase;
+    text-shadow: 4px 4px 0px rgba(0, 0, 0, 0.5);
+
+    /* Tighten spacing specifically to match width of "ZEN सी" */
+    letter-spacing: -3px;
+
+    /* ADJUSTED GAP: -45px provides a tiny separation (vs -50px which was overlapping) */
+    margin-top: -45px;
+
+    opacity: 0;
+    transform: translateY(50px) scale(0.9);
+    animation: riseUp 0.8s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+    animation-delay: 1.0s;
+}
+
+/* The Lightning Bolt */
+.bolt-container {
+    position: absolute;
+    top: -35px;
+    left: 50%;
+    /* Centered visually between the words */
+    transform: translateX(-55%) rotate(15deg);
+    z-index: 10;
+    pointer-events: none;
+}
+
+.bolt {
+    width: 65px;
+    height: 95px;
+    fill: var(--zen-white);
+    filter: drop-shadow(0 0 10px rgba(255, 255, 255, 0.8));
+    opacity: 0;
+    transform: scale(0);
+    animation: thunderStrike 0.5s ease-out forwards;
+    animation-delay: 1.4s;
+}
+
+/* Hover Effects */
+.logo-wrapper:hover .bolt {
+    animation: thunderShake 0.4s ease-in-out infinite;
+    filter: drop-shadow(0 0 20px var(--zen-yellow));
+}
+
+.logo-wrapper:hover .char-z,
+.logo-wrapper:hover .char-si {
+    color: #fff;
+    transition: color 0.2s;
+}
+
+.logo-wrapper:hover .char-en,
+.logo-wrapper:hover .logo-bottom {
+    color: var(--zen-yellow);
+    transition: color 0.2s;
+}
+
+/* Animations */
+@keyframes slideInLeft {
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+@keyframes slideInDown {
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes riseUp {
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+@keyframes textGlitch {
+    0% {
+        opacity: 0;
+        filter: blur(10px);
+        transform: scale(1.2) translateY(-2px);
+    }
+
+    50% {
+        opacity: 1;
+        filter: blur(0px);
+        transform: scale(1) translateY(-2px);
+    }
+
+    100% {
+        opacity: 1;
+        filter: blur(0px);
+        transform: scale(1) translateY(-2px);
+    }
+}
+
+@keyframes thunderStrike {
+    0% {
+        opacity: 0;
+        transform: scale(0) rotate(0deg);
+    }
+
+    50% {
+        opacity: 1;
+        transform: scale(1.4) rotate(-10deg);
+    }
+
+    100% {
+        opacity: 1;
+        transform: scale(1) rotate(0deg);
+    }
+}
+
+@keyframes thunderShake {
+
+    0%,
+    100% {
+        transform: rotate(0deg) scale(1);
+    }
+
+    25% {
+        transform: rotate(-5deg) scale(1.1);
+    }
+
+    75% {
+        transform: rotate(5deg) scale(1.1);
+    }
+}
+
+@media (max-width: 600px) {
+
+    .logo-top,
+    .logo-bottom {
+        font-size: 3rem;
+    }
+
+    .bolt {
+        width: 40px;
+        height: 60px;
+        top: -15px;
+    }
+}

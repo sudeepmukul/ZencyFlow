@@ -1,14 +1,16 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Outlet } from 'react-router-dom';
 import { Sidebar } from './Sidebar';
 import { TimerWidget } from '../timer/TimerWidget';
 import { CheckInModal } from '../timer/CheckInModal';
 import { useData } from '../../contexts/DataContext';
 import { NotificationManager } from '../../lib/notifications';
+import { PanelLeftOpen } from 'lucide-react';
 
 export function Layout() {
     const { tasks, habits, habitLogs } = useData();
     const lastNotificationRef = useRef({});
+    const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
     useEffect(() => {
         NotificationManager.requestPermission();
@@ -89,7 +91,17 @@ export function Layout() {
         <div className="flex h-screen text-white overflow-hidden font-sans selection:bg-neon-500/30 relative">
             <div className="breathing-bg"></div>
 
-            <Sidebar />
+            {/* Sidebar with toggle prop */}
+            {/* Sidebar with toggle prop */}
+            <div className={`transition-all duration-300 ease-in-out ${isSidebarOpen ? 'w-64' : 'w-20'} flex-shrink-0 relative`}>
+                <div className={`h-full absolute top-0 left-0 transition-all duration-300 ${isSidebarOpen ? 'w-64' : 'w-20'}`}>
+                    <Sidebar
+                        isOpen={isSidebarOpen}
+                        onToggle={() => setIsSidebarOpen(!isSidebarOpen)}
+                    />
+                </div>
+            </div>
+
             <main className="flex-1 overflow-y-auto glass-panel m-4 rounded-[30px] border border-white/10 relative z-10">
                 <div className="max-w-7xl mx-auto p-8">
                     <Outlet />

@@ -16,7 +16,10 @@ export const DataProvider = ({ children }) => {
     const [journalEntries, setJournalEntries] = useState([]);
     const [habitLogs, setHabitLogs] = useState([]);
     const [timerLogs, setTimerLogs] = useState([]);
+    const [reminders, setReminders] = useState([]);
     const [categories, setCategories] = useState([]);
+    const [calendarEvents, setCalendarEvents] = useState([]);
+    const [calendarLayers, setCalendarLayers] = useState([]);
 
     const refreshData = useCallback(async () => {
         try {
@@ -27,7 +30,10 @@ export const DataProvider = ({ children }) => {
                 fetchedSleep,
                 fetchedJournal,
                 fetchedHabitLogs,
-                fetchedCategories
+                fetchedReminders,
+                fetchedCategories,
+                fetchedCalendarEvents,
+                fetchedCalendarLayers
             ] = await Promise.all([
                 db.getAll('goals'),
                 db.getAll('habits'),
@@ -35,7 +41,10 @@ export const DataProvider = ({ children }) => {
                 db.getAll('sleep_logs'),
                 db.getAll('journal_entries'),
                 db.getAll('habit_logs'),
-                db.getAll('categories')
+                db.getAll('reminders'),
+                db.getAll('categories'),
+                db.getAll('calendar_events'),
+                db.getAll('calendar_layers')
             ]);
 
             const fourDaysAgo = new Date();
@@ -61,7 +70,24 @@ export const DataProvider = ({ children }) => {
             setSleepLogs(fetchedSleep || []);
             setJournalEntries(fetchedJournal || []);
             setHabitLogs(fetchedHabitLogs || []);
+            setReminders(fetchedReminders || []);
             setCategories(fetchedCategories || []);
+            setCalendarEvents(fetchedCalendarEvents || []);
+
+            // Initial Layers Setup
+            if (!fetchedCalendarLayers || fetchedCalendarLayers.length === 0) {
+                const defaultLayers = [
+                    { id: 'tasks', name: 'Tasks', color: '#a855f7', enabled: true, type: 'system' }, // Purple
+                    { id: 'work', name: 'Work', color: '#3b82f6', enabled: true, type: 'custom' }, // Blue
+                    { id: 'personal', name: 'Personal', color: '#22c55e', enabled: true, type: 'custom' } // Green
+                ];
+                // We don't save them here to avoid async complexity in the loops, 
+                // but we set state. They will be saved when user toggles/edits.
+                // Actually better to save if empty so we have persistence.
+                setCalendarLayers(defaultLayers);
+            } else {
+                setCalendarLayers(fetchedCalendarLayers);
+            }
 
             const fetchedTimerLogs = await db.getAll('timer_logs');
             setTimerLogs(fetchedTimerLogs || []);
@@ -170,8 +196,11 @@ export const DataProvider = ({ children }) => {
     };
 
     const addTask = async (task) => {
-        await db.add('tasks', { ...task, status: 'pending', createdAt: new Date() });
+        const newTask = { ...task, status: 'pending', createdAt: new Date() };
+        await db.add('tasks', newTask);
         await refreshData();
+        // Optimistic check for immediate feedback (Planner, Prioritizer)
+        await checkAchievements([...tasks, newTask], habits);
     };
 
     const updateTask = async (task) => {
@@ -183,15 +212,22 @@ export const DataProvider = ({ children }) => {
         const task = tasks.find(t => t.id === taskId);
         if (!task) return;
 
-        if (task.status === 'completed') {
-            await db.put('tasks', { ...task, status: 'pending', completedAt: null });
-            await addXP(-(task.xpValue || 20));
-        } else {
-            await db.put('tasks', { ...task, status: 'completed', completedAt: new Date().toISOString() });
+        const updatedTask = task.status === 'completed'
+            ? { ...task, status: 'pending', completedAt: null }
+            : { ...task, status: 'completed', completedAt: new Date().toISOString() };
+
+        await db.put('tasks', updatedTask);
+        if (updatedTask.status === 'completed') {
             await addXP(task.xpValue || 20);
+        } else {
+            await addXP(-(task.xpValue || 20));
         }
+
         await refreshData();
-        await checkAchievements(tasks, habits);
+
+        // Pass updated state to achievement check
+        const updatedTasks = tasks.map(t => t.id === taskId ? updatedTask : t);
+        await checkAchievements(updatedTasks, habits);
     };
 
     const deleteTask = async (id) => {
@@ -246,6 +282,54 @@ export const DataProvider = ({ children }) => {
         await refreshData();
     };
 
+    const addReminder = async (reminder) => {
+        await db.add('reminders', { ...reminder, createdAt: new Date() });
+        await refreshData();
+    };
+
+    const deleteReminder = async (id) => {
+        await db.delete('reminders', id);
+        await refreshData();
+    };
+
+    const addCalendarEvent = async (event) => {
+        await db.add('calendar_events', { ...event, createdAt: new Date() });
+        await refreshData();
+    };
+
+    const updateCalendarEvent = async (event) => {
+        await db.put('calendar_events', event);
+        await refreshData();
+    };
+
+    const deleteCalendarEvent = async (id) => {
+        await db.delete('calendar_events', id);
+        await refreshData();
+    };
+
+    const toggleCalendarLayer = async (layerId) => {
+        let newLayers = [...calendarLayers];
+        const layerIndex = newLayers.findIndex(l => l.id === layerId);
+
+        if (layerIndex >= 0) {
+            newLayers[layerIndex] = { ...newLayers[layerIndex], enabled: !newLayers[layerIndex].enabled };
+        } else {
+            // Should not happen for system layers, but for new custom logic
+            return;
+        }
+
+        // Save all layers to DB to persist state
+        for (const layer of newLayers) {
+            await db.put('calendar_layers', layer);
+        }
+        setCalendarLayers(newLayers); // Optimistic update
+    };
+
+    const addCalendarLayer = async (layer) => {
+        await db.add('calendar_layers', layer);
+        await refreshData();
+    };
+
     const value = {
         tasks,
         goals,
@@ -253,6 +337,7 @@ export const DataProvider = ({ children }) => {
         habitLogs,
         journalEntries,
         sleepLogs,
+        reminders,
         categories,
         addTask,
         updateTask,
@@ -274,9 +359,18 @@ export const DataProvider = ({ children }) => {
         addSleepLog,
         updateSleepLog,
         deleteSleepLog,
+        addReminder,
+        deleteReminder,
         addCategory,
         deleteCategory,
         refreshData,
+        calendarEvents,
+        calendarLayers,
+        addCalendarEvent,
+        updateCalendarEvent,
+        deleteCalendarEvent,
+        toggleCalendarLayer,
+        addCalendarLayer,
         activeTimer: user.activeTimer || null,
         timerLogs,
         timerSettings: user.settings?.timer || { efficiency: 0.6, checkInInterval: 30 },
@@ -295,6 +389,8 @@ export const DataProvider = ({ children }) => {
                 taskTitle: task.title,
                 startTime: new Date().toISOString(),
                 duration: 0,
+                accumulatedTime: 0,
+                lastResumeTime: new Date().toISOString(),
                 lastCheckIn: new Date().toISOString(),
                 isPaused: false,
                 checkIns: 0
@@ -325,9 +421,18 @@ export const DataProvider = ({ children }) => {
             try {
                 await updateProfile({ activeTimer: null });
 
-                const { taskId, checkIns, startTime } = timerData;
-                // Use provided finalDuration or fall back to stored duration
-                const duration = finalDuration !== null ? finalDuration : timerData.duration;
+                const { taskId, checkIns, startTime, accumulatedTime, lastResumeTime, isPaused } = timerData;
+
+                // Calculate precise duration based on timestamps
+                let duration = accumulatedTime || 0;
+                if (!isPaused && lastResumeTime) {
+                    const now = new Date();
+                    const currentSession = (now - new Date(lastResumeTime)) / 1000;
+                    duration += currentSession;
+                }
+
+                // Fallback to existing duration if calculation fails (safety)
+                if (isNaN(duration)) duration = timerData.duration || 0;
 
                 const efficiency = user.settings?.timer?.efficiency || 0.6;
                 const productiveDuration = Math.round(duration * efficiency);
@@ -359,32 +464,54 @@ export const DataProvider = ({ children }) => {
         },
 
         pauseTimer: async () => {
-            if (!user.activeTimer) return;
-            await updateProfile({ activeTimer: { ...user.activeTimer, isPaused: true } });
+            if (!user.activeTimer || user.activeTimer.isPaused) return;
+
+            const now = new Date();
+            const lastResume = new Date(user.activeTimer.lastResumeTime || now); // Fallback to now avoids huge jump if missing
+            const currentSession = (now - lastResume) / 1000;
+            const newAccumulated = (user.activeTimer.accumulatedTime || 0) + currentSession;
+
+            await updateProfile({
+                activeTimer: {
+                    ...user.activeTimer,
+                    isPaused: true,
+                    lastResumeTime: null,
+                    accumulatedTime: newAccumulated,
+                    duration: newAccumulated // Update display duration
+                }
+            });
         },
 
         resumeTimer: async () => {
-            if (!user.activeTimer) return;
+            if (!user.activeTimer || !user.activeTimer.isPaused) return;
             await updateProfile({
                 activeTimer: {
                     ...user.activeTimer,
                     isPaused: false,
+                    lastResumeTime: new Date().toISOString(),
                     lastCheckIn: new Date().toISOString()
                 }
             });
         },
 
         syncTimerDuration: async (newDuration) => {
+            // We kept this for compatibility, but with new logic, duration is derived from timestamps.
+            // However, we can update the 'duration' field for simple UI reads if they don't calculate it.
             if (!user.activeTimer || user.activeTimer.isPaused) return;
-            // Only update if significantly different to avoid thrashing
-            if (Math.abs(user.activeTimer.duration - newDuration) > 5) {
-                await updateProfile({
-                    activeTimer: {
-                        ...user.activeTimer,
-                        duration: newDuration
-                    }
-                });
-            }
+
+            // Recalculate based on wall clock to ensure we don't save drifted time
+            const now = new Date();
+            const lastResume = new Date(user.activeTimer.lastResumeTime);
+            const currentSession = (now - lastResume) / 1000;
+            const total = (user.activeTimer.accumulatedTime || 0) + currentSession;
+
+            // Only update DB if we want to checkpoint the 'duration' field for redundancy
+            await updateProfile({
+                activeTimer: {
+                    ...user.activeTimer,
+                    duration: total
+                }
+            });
         },
 
         checkIn: async () => {

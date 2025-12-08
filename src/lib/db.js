@@ -1,7 +1,7 @@
 import { openDB } from 'idb';
 
 const DB_NAME = 'ZencyDB';
-const DB_VERSION = 2;
+const DB_VERSION = 4;
 
 export const initDB = async () => {
     return openDB(DB_NAME, DB_VERSION, {
@@ -45,6 +45,20 @@ export const initDB = async () => {
                 const store = db.createObjectStore('timer_logs', { keyPath: 'id', autoIncrement: true });
                 store.createIndex('taskId', 'taskId');
                 store.createIndex('startTime', 'startTime');
+            }
+            // Reminders store
+            if (!db.objectStoreNames.contains('reminders')) {
+                db.createObjectStore('reminders', { keyPath: 'id', autoIncrement: true });
+            }
+            // Calendar Events store
+            if (!db.objectStoreNames.contains('calendar_events')) {
+                const store = db.createObjectStore('calendar_events', { keyPath: 'id', autoIncrement: true });
+                store.createIndex('startTime', 'startTime');
+                store.createIndex('endTime', 'endTime');
+            }
+            // Calendar Layers store
+            if (!db.objectStoreNames.contains('calendar_layers')) {
+                db.createObjectStore('calendar_layers', { keyPath: 'id' });
             }
         },
         blocked() {

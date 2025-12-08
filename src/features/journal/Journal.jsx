@@ -84,7 +84,7 @@ export function Journal() {
     return (
         <div className="space-y-8 max-w-5xl mx-auto">
             <div className="flex items-center justify-between">
-                <h1 className="text-3xl font-bold text-white">Journal</h1>
+                <h1 className="text-4xl md:text-5xl font-bold bg-gradient-to-r from-white via-white to-zinc-500 bg-clip-text text-transparent">Journal</h1>
                 <Button onClick={() => handleOpenModal()}>
                     <Plus className="w-4 h-4" /> New Entry
                 </Button>

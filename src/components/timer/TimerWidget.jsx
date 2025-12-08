@@ -16,9 +16,14 @@ export function TimerWidget() {
     // Initialize local state from DB when timer loads
     useEffect(() => {
         if (activeTimer) {
-            setElapsedTime(activeTimer.duration || 0);
+            const now = Date.now();
+            let currentSession = 0;
+            if (!activeTimer.isPaused && activeTimer.lastResumeTime) {
+                currentSession = (now - new Date(activeTimer.lastResumeTime).getTime()) / 1000;
+            }
+            setElapsedTime(Math.floor((activeTimer.accumulatedTime || 0) + currentSession));
         }
-    }, [activeTimer?.taskId]); // Only reset when task changes
+    }, [activeTimer?.taskId, activeTimer?.lastResumeTime, activeTimer?.accumulatedTime]);
 
     // Auto Pause on Idle
     useIdleTimer({
@@ -39,20 +44,24 @@ export function TimerWidget() {
         let interval;
         if (activeTimer && !activeTimer.isPaused) {
             interval = setInterval(() => {
-                setElapsedTime(prev => {
-                    const newTime = prev + 1;
+                // Calculate precise time based on wall clock (avoids throttle lag)
+                const now = Date.now();
+                let currentSession = 0;
+                if (activeTimer.lastResumeTime) {
+                    currentSession = (now - new Date(activeTimer.lastResumeTime).getTime()) / 1000;
+                }
+                const total = (activeTimer.accumulatedTime || 0) + currentSession;
+                const newTime = Math.floor(total);
 
-                    // Sync with DB every 30 seconds
-                    const now = Date.now();
-                    if (now - lastSyncRef.current > 30000) {
-                        syncTimerDuration(newTime);
-                        lastSyncRef.current = now;
-                    }
-                    return newTime;
-                });
+                setElapsedTime(newTime);
+
+                // Sync with DB every 30 seconds
+                if (now - lastSyncRef.current > 30000) {
+                    syncTimerDuration(newTime);
+                    lastSyncRef.current = now;
+                }
 
                 const lastCheckInTime = new Date(activeTimer.lastCheckIn).getTime();
-                const now = new Date().getTime();
                 const minutesSinceCheckIn = (now - lastCheckInTime) / 1000 / 60;
 
                 if (minutesSinceCheckIn >= (timerSettings.checkInInterval || 30) && !showCheckIn) {

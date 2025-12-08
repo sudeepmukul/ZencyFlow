@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { db } from '../lib/db';
 import { useXP } from '../hooks/useXP';
 import confetti from 'canvas-confetti';
-import { NotificationManager } from '../lib/notifications';
+import { useToast } from './ToastContext';
 
 const UserContext = createContext();
 
@@ -14,6 +14,7 @@ export const UserProvider = ({ children }) => {
         settings: {}
     });
     const { calculateLevel, calculateNextLevelXP, calculateProgress } = useXP();
+    const { addToast } = useToast();
 
     const [isLoading, setIsLoading] = useState(true);
 
@@ -45,7 +46,6 @@ export const UserProvider = ({ children }) => {
                 }
             } catch (error) {
                 console.error("Failed to load user (using fallback):", error);
-                // Fallback user so app doesn't crash/hang
                 if (mounted) {
                     setUser({
                         id: 'profile',
@@ -83,15 +83,13 @@ export const UserProvider = ({ children }) => {
         setUser(updatedUser);
 
         if (newLevel > user.level) {
-            // Trigger level up event or notification (can be handled by UI)
-            console.log('Level Up!');
+            addToast("Level Up! ⚡", `You reached Level ${newLevel}!`, "achievement");
 
-            // Fire confetti!
             confetti({
                 particleCount: 100,
                 spread: 70,
                 origin: { y: 0.6 },
-                colors: ['#a855f7', '#ec4899', '#eab308', '#22c55e'] // Purple, Pink, Yellow, Green
+                colors: ['#a855f7', '#ec4899', '#eab308', '#22c55e']
             });
 
             return { leveledUp: true, newLevel };
@@ -131,26 +129,38 @@ export const UserProvider = ({ children }) => {
         return false;
     };
 
+    // Helper to queue unlock
     const unlockBadge = async (badgeId) => {
+        // This exists for manual calling if needed, but primary logic is now in checkAchievements
         const currentBadges = user.badges || [];
         if (!currentBadges.includes(badgeId)) {
             const newBadges = [...currentBadges, badgeId];
             await updateProfile({ badges: newBadges });
 
-            // Notify user
-            NotificationManager.send("Badge Unlocked! 🏆", {
-                body: `You unlocked a new badge! Check your profile.`,
-                icon: '/vite.svg'
-            });
-
-            // Fire confetti
+            const labels = {
+                'planner': 'Planner',
+                'weekend_warrior': 'Weekend Warrior',
+                'clean_slate': 'Clean Slate',
+                'prioritizer': 'Prioritizer',
+                'early_bird': 'Early Bird',
+                'night_owl': 'Night Owl',
+                'eat_the_frog': 'Eat the Frog',
+                'first_task': 'First Steps',
+                'veteran': 'Veteran',
+                'elite': 'Elite',
+                'grandmaster': 'Grandmaster',
+                'legend': 'Legend',
+                'level_5': 'Level 5',
+                'streak_7': 'On Fire',
+                'survivor': 'Survivor'
+            };
+            addToast("Achievement Unlocked! 🏆", `You earned the '${labels[badgeId] || 'New'}' badge!`, "achievement");
             confetti({
                 particleCount: 150,
                 spread: 100,
                 origin: { y: 0.6 },
-                colors: ['#FFD700', '#FFA500', '#FF4500'] // Gold colors
+                colors: ['#FFD700', '#FFA500', '#FF4500']
             });
-
             return true;
         }
         return false;
@@ -168,20 +178,146 @@ export const UserProvider = ({ children }) => {
         useInventoryItem,
         unlockBadge,
         checkAchievements: async (tasks, habits) => {
-            const completedTasks = tasks.filter(t => t.status === 'completed').length;
+            const now = new Date();
+            const todayStr = now.toISOString().split('T')[0];
+            const completedTasks = tasks.filter(t => t.status === 'completed');
+            const completedCount = completedTasks.length;
 
-            // 1. First Steps
-            if (completedTasks >= 1) await unlockBadge('first_task');
+            // Atomic unlock queue
+            const badgesToUnlock = [];
+            const currentBadges = new Set(user.badges || []);
 
-            // 2. Task Master (50 tasks)
-            if (completedTasks >= 50) await unlockBadge('task_master');
+            // Helper to queue unlock
+            const queueUnlock = (id) => {
+                if (!currentBadges.has(id)) {
+                    badgesToUnlock.push(id);
+                    currentBadges.add(id); // Prevent duplicate adds in same loop
+                }
+            };
 
-            // 3. Level 5
-            if (user.level >= 5) await unlockBadge('level_5');
+            // --- EXISTING & MILESTONES ---
 
-            // 4. Streak 7 (Any habit with streak >= 7)
-            const hasLongStreak = habits.some(h => h.streak >= 7);
-            if (hasLongStreak) await unlockBadge('streak_7');
+            // 1. First Steps (1 task)
+            if (completedCount >= 1) queueUnlock('first_task');
+
+            // 2. Veteran (25 tasks)
+            if (completedCount >= 25) queueUnlock('veteran');
+
+            // 3. Elite (50 tasks)
+            if (completedCount >= 50) queueUnlock('elite');
+
+            // 4. Grandmaster (100 tasks)
+            if (completedCount >= 100) queueUnlock('grandmaster');
+
+            // 5. Legend (150 tasks)
+            if (completedCount >= 150) queueUnlock('legend');
+
+            // 6. Level 5
+            if (user.level >= 5) queueUnlock('level_5');
+
+            // 7. Streak 7
+            if (habits.some(h => h.streak >= 7)) queueUnlock('streak_7');
+
+
+            // --- BEHAVIORAL ---
+
+            // 8. Planner: Schedule a task for a future date
+            const hasFutureTask = tasks.some(t => {
+                if (!t.dueDate) return false;
+                const taskDate = t.dueDate.split('T')[0];
+                return taskDate > todayStr;
+            });
+            if (hasFutureTask) queueUnlock('planner');
+
+            // 9. Prioritizer: Use a "High Priority" flag
+            const hasHighPriority = tasks.some(t => t.priority === 'High');
+            if (hasHighPriority) queueUnlock('prioritizer');
+
+            // 10. Clean Slate: Clear daily to-do list
+            const completedToday = completedTasks.filter(t => t.completedAt?.startsWith(todayStr));
+            const activeDueToday = tasks.filter(t =>
+                t.status !== 'completed' &&
+                t.dueDate &&
+                t.dueDate <= todayStr
+            );
+
+            // If I have completed tasks today, and NO active tasks due today -> Clean Slate.
+            if ((activeDueToday.length + completedToday.length) > 0 && activeDueToday.length === 0) {
+                queueUnlock('clean_slate');
+            }
+
+
+            // --- TIME BASED ---
+
+            completedTasks.forEach(t => {
+                if (!t.completedAt) return;
+                const completedDate = new Date(t.completedAt);
+                const localHour = completedDate.getHours();
+
+                // 11. Early Bird: Before 7:00 AM
+                if (localHour < 7) queueUnlock('early_bird');
+
+                // 12. Night Owl: After 10:00 PM (22:00)
+                if (localHour >= 22) queueUnlock('night_owl');
+            });
+
+            // 13. Weekend Warrior: Complete 10 tasks on Sat/Sun
+            const weekendTaskCount = completedTasks.filter(t => {
+                if (!t.completedAt) return false;
+                const d = new Date(t.completedAt).getDay();
+                return d === 0 || d === 6; // 0=Sun, 6=Sat
+            }).length;
+
+            if (weekendTaskCount >= 10) queueUnlock('weekend_warrior');
+
+
+            // 14. Eat the Frog: Hardest task first thing in the morning.
+            if (completedToday.length > 0) {
+                const todaySorted = [...completedToday].sort((a, b) => new Date(a.completedAt) - new Date(b.completedAt));
+                const firstTask = todaySorted[0];
+                if (firstTask.priority === 'High') {
+                    queueUnlock('eat_the_frog');
+                }
+            }
+
+            // --- COMMIT CHANGES ---
+            if (badgesToUnlock.length > 0) {
+                // 1. Update State/DB ONCE
+                const newBadges = [...(user.badges || []), ...badgesToUnlock];
+                await updateProfile({ badges: newBadges });
+
+                // 2. Notifications
+                const labels = {
+                    'planner': 'Planner',
+                    'weekend_warrior': 'Weekend Warrior',
+                    'clean_slate': 'Clean Slate',
+                    'prioritizer': 'Prioritizer',
+                    'early_bird': 'Early Bird',
+                    'night_owl': 'Night Owl',
+                    'eat_the_frog': 'Eat the Frog',
+                    'first_task': 'First Steps',
+                    'veteran': 'Veteran',
+                    'elite': 'Elite',
+                    'grandmaster': 'Grandmaster',
+                    'legend': 'Legend',
+                    'level_5': 'Level 5',
+                    'streak_7': 'On Fire',
+                    'survivor': 'Survivor'
+                };
+
+                // Show separate toasts for each new discovery
+                badgesToUnlock.forEach(id => {
+                    addToast("Achievement Unlocked! 🏆", `You earned the '${labels[id] || 'New'}' badge!`, "achievement");
+                });
+
+                // Single Confetti Blast
+                confetti({
+                    particleCount: 150,
+                    spread: 100,
+                    origin: { y: 0.6 },
+                    colors: ['#FFD700', '#FFA500', '#FF4500']
+                });
+            }
         }
     };
 

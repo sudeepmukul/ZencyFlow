@@ -79,7 +79,7 @@ export function Goals() {
     return (
         <div className="space-y-6">
             <div className="flex items-center justify-between">
-                <h1 className="text-3xl font-bold text-white">Goals</h1>
+                <h1 className="text-4xl md:text-5xl font-bold bg-gradient-to-r from-white via-white to-zinc-500 bg-clip-text text-transparent">Goals</h1>
                 <Button onClick={() => openModal()}>
                     <Plus className="w-4 h-4" /> Add Goal
                 </Button>

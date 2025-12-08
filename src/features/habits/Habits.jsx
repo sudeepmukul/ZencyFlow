@@ -1,146 +1,192 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useData } from '../../contexts/DataContext';
-import { Card } from '../../components/ui/Card';
-import { Button } from '../../components/ui/Button';
-import { Modal } from '../../components/ui/Modal';
-import { Input, Select } from '../../components/ui/Input';
-import { Plus, Flame, Calendar as CalendarIcon, Edit2, Trash2, Snowflake } from 'lucide-react';
-import { HabitGrid } from './HabitGrid';
-import { Heatmap } from './Heatmap';
-import { MiniHeatmap } from './MiniHeatmap';
-
 import { useUser } from '../../contexts/UserContext';
+import { Plus, Zap, ShoppingBag, Calendar } from 'lucide-react';
+import { HabitCard } from './components/HabitCard';
+import { HabitHeatMap } from './components/HabitHeatMap';
+import { AddHabitModal } from './components/AddHabitModal';
 
 export function Habits() {
-    const { habits, addHabit, updateHabit, deleteHabit, habitLogs } = useData();
+    const { habits, addHabit, updateHabit, deleteHabit, toggleHabit, habitLogs } = useData();
     const { user, spendXP, addInventoryItem } = useUser();
     const [isModalOpen, setIsModalOpen] = useState(false);
-    const [formData, setFormData] = useState({
-        title: '',
-        category: 'Health',
-        frequency: 'daily',
-    });
+    const [editingHabit, setEditingHabit] = useState(null);
 
-    const categories = ['Health', 'Productivity', 'Mindfulness', 'Learning', 'Social'];
+    // Helper to get YYYY-MM-DD in local time
+    const getLocalDateString = (date) => {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    };
 
-    const handleSubmit = async (e) => {
-        e.preventDefault();
-        if (formData.id) {
-            await updateHabit(formData);
+    // Transform raw habit data into the format required by the UI
+    const processedHabits = useMemo(() => {
+        const today = new Date();
+        // Calculate the start of the current week (Monday)
+        const day = today.getDay();
+        const diff = today.getDate() - day + (day === 0 ? -6 : 1); // adjust when day is sunday
+        const monday = new Date(today);
+        monday.setDate(diff);
+        monday.setHours(0, 0, 0, 0);
+
+        return habits.map(habit => {
+            const thisHabitLogs = habitLogs.filter(l => l.habitId === habit.id);
+            const loggedDates = new Set(thisHabitLogs.map(l => l.date)); // strings "YYYY-MM-DD"
+
+            // 1. Calculate Week Status (Mon-Sun)
+            const weekStatus = Array(7).fill(false).map((_, i) => {
+                const d = new Date(monday);
+                d.setDate(monday.getDate() + i);
+                const dateStr = getLocalDateString(d);
+                return loggedDates.has(dateStr);
+            });
+
+            // 2. Calculate History (Last 364 days for heatmap)
+            const history = [];
+            const endDate = new Date(); // Today
+            // Go back 364 days
+            for (let i = 363; i >= 0; i--) {
+                const d = new Date(endDate);
+                d.setDate(d.getDate() - i);
+                const dateStr = getLocalDateString(d);
+                history.push(loggedDates.has(dateStr));
+            }
+
+            return {
+                ...habit,
+                weekStatus,
+                history,
+                // Ensure legacy habits have an icon
+                icon: habit.icon || '📝',
+                best: habit.longestStreak || habit.best || 0,
+            };
+        });
+    }, [habits, habitLogs]);
+
+    const handleToggle = async (habitId, dayIndex) => {
+        // Calculate the date based on the current week's Monday + dayIndex
+        const today = new Date();
+        const day = today.getDay();
+        const diff = today.getDate() - day + (day === 0 ? -6 : 1);
+        const monday = new Date(today);
+        monday.setDate(diff);
+
+        const targetDate = new Date(monday);
+        targetDate.setDate(monday.getDate() + dayIndex);
+        const dateStr = getLocalDateString(targetDate);
+
+        // Only allow toggling if not in the future (optional rule, but good for validity)
+        // For now, adhere to UI freedom or backend constraints.
+        // The DataContext toggleHabit handles logic.
+        await toggleHabit(habitId, dateStr);
+    };
+
+    const handleSaveHabit = async (habitData) => {
+        if (habitData.id) {
+            // Update
+            await updateHabit(habitData);
         } else {
-            await addHabit(formData);
+            // Create
+            await addHabit({
+                ...habitData,
+                frequency: 'daily',
+            });
         }
-        setIsModalOpen(false);
-        setFormData({ title: '', category: 'Health', frequency: 'daily' });
     };
 
     const handleBuyFreeze = () => {
         if (spendXP(50)) {
             addInventoryItem('streak_freeze');
-            alert("❄️ Streak Freeze acquired! It will automatically save your streak if you miss a day.");
+            alert("❄️ Streak Freeze acquired!");
         } else {
             alert("Not enough XP! You need 50 XP.");
         }
     };
 
+    const openNewHabitModal = () => {
+        setEditingHabit(null);
+        setIsModalOpen(true);
+    };
+
     return (
-        <div className="space-y-8">
-            <div className="flex items-center justify-between">
-                <div>
-                    <h1 className="text-3xl font-bold text-white">Habit Tracker</h1>
-                    <div className="flex items-center gap-4 mt-2">
-                        <div className="flex items-center gap-2 text-sm text-cyan-400 bg-cyan-950/30 px-3 py-1 rounded-full border border-cyan-900">
-                            <Snowflake className="w-4 h-4" />
-                            <span>{user.inventory?.streak_freeze || 0} Freezes</span>
-                        </div>
-                        <Button size="sm" variant="secondary" onClick={handleBuyFreeze} className="h-7 text-xs">
-                            Buy Freeze (50 XP)
-                        </Button>
-                    </div>
-                </div>
-                <Button onClick={() => setIsModalOpen(true)}>
-                    <Plus className="w-4 h-4" /> New Habit
-                </Button>
-            </div>
+        <div className="min-h-screen bg-transparent p-6 font-sans text-gray-100 selection:bg-[#FBFF00] selection:text-black md:p-12 pb-24">
 
-            {/* Weekly Tracker */}
-            <div className="space-y-4">
-                <h2 className="text-xl font-bold text-zinc-300 flex items-center gap-2">
-                    <CalendarIcon className="w-5 h-5" /> Weekly Progress
-                </h2>
-                <div className="grid gap-4">
-                    {habits.map(habit => (
-                        <div key={habit.id} className="space-y-2">
-                            <div className="flex justify-between items-center pr-4">
-                                <div className="flex-1">
-                                    <HabitGrid habit={habit} logs={habitLogs} />
-                                </div>
-                                <div className="flex flex-col gap-2 ml-2">
-                                    <Button variant="ghost" size="icon" onClick={() => {
-                                        setFormData({ ...habit });
-                                        setIsModalOpen(true);
-                                    }}>
-                                        <Edit2 className="w-4 h-4 text-zinc-400" />
-                                    </Button>
-                                    <Button variant="ghost" size="icon" onClick={() => deleteHabit(habit.id)}>
-                                        <Trash2 className="w-4 h-4 text-red-500" />
-                                    </Button>
-                                </div>
-                            </div>
-                            <div className="pl-4 pr-4 pb-4">
-                                <div className="text-xs text-zinc-500 mb-1">Last 90 Days Consistency</div>
-                                <MiniHeatmap habitId={habit.id} logs={habitLogs} />
-                            </div>
-                        </div>
-                    ))}
-                    {habits.length === 0 && (
-                        <div className="text-center py-10 text-zinc-500 bg-zinc-900/30 rounded-xl border border-zinc-800 border-dashed">
-                            No habits yet. Start building your streak!
-                        </div>
-                    )}
-                </div>
-            </div>
+            <AddHabitModal
+                isOpen={isModalOpen}
+                onClose={() => setIsModalOpen(false)}
+                onAdd={handleSaveHabit}
+                initialData={editingHabit}
+            />
 
-            {/* Yearly Heatmap (Placeholder for now, or simple implementation) */}
-            {habits.length > 0 && (
-                <div className="space-y-4">
-                    <h2 className="text-xl font-bold text-zinc-300 flex items-center gap-2">
-                        <Flame className="w-5 h-5 text-orange-500" /> Overall Consistency
-                    </h2>
-                    <Card>
-                        <Heatmap logs={habitLogs} />
-                    </Card>
-                </div>
-            )}
-
-            <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={formData.id ? "Edit Habit" : "New Habit"}>
-                <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="mx-auto max-w-4xl space-y-8">
+                <header className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
                     <div>
-                        <label className="block text-sm font-medium text-zinc-400 mb-1">Habit Title</label>
-                        <Input
-                            required
-                            value={formData.title}
-                            onChange={e => setFormData({ ...formData, title: e.target.value })}
-                            placeholder="e.g. Morning Meditation"
-                        />
+                        <h1 className="text-4xl md:text-5xl font-bold bg-gradient-to-r from-white via-white to-zinc-500 bg-clip-text text-transparent tracking-tight">
+                            Habit Tracker
+                            <span className="ml-2 inline-block h-2 w-2 rounded-full bg-[#FBFF00] align-baseline shadow-[0_0_10px_#FBFF00]"></span>
+                        </h1>
+                        <p className="mt-2 text-gray-400">
+                            XP: <span className="font-bold text-[#FBFF00]">{user.xp || 0}</span>
+                        </p>
                     </div>
 
-                    <div>
-                        <label className="block text-sm font-medium text-zinc-400 mb-1">Category</label>
-                        <Select
-                            value={formData.category}
-                            onChange={e => setFormData({ ...formData, category: e.target.value })}
+                    <div className="flex items-center gap-4">
+                        <button
+                            onClick={handleBuyFreeze}
+                            className="group flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-semibold text-gray-300 transition-all hover:border-[#FBFF00]/50 hover:bg-[#FBFF00]/10 hover:text-[#FBFF00]"
                         >
-                            {categories.map(c => <option key={c} value={c}>{c}</option>)}
-                        </Select>
+                            <div className="flex flex-col items-start leading-none">
+                                <span className="text-[10px] uppercase text-gray-500 group-hover:text-[#FBFF00]/70">Cost: 50XP</span>
+                                <span className="flex items-center gap-1">
+                                    <Zap size={14} className="fill-[#FBFF00] text-[#FBFF00]" />
+                                    {user.inventory?.streak_freeze || 0} Freezes
+                                </span>
+                            </div>
+                            <ShoppingBag size={16} className="ml-2 opacity-50 group-hover:opacity-100" />
+                        </button>
+
+                        <button
+                            onClick={openNewHabitModal}
+                            className="group flex items-center gap-2 rounded-full bg-[#FBFF00] px-6 py-2.5 text-sm font-bold text-black shadow-[0_0_20px_rgba(251,255,0,0.3)] transition-all hover:bg-[#e1e600] hover:shadow-[0_0_30px_rgba(251,255,0,0.5)] hover:scale-105 active:scale-95"
+                        >
+                            <Plus size={18} strokeWidth={3} />
+                            New Habit
+                        </button>
+                    </div>
+                </header>
+
+                {/* Global Contribution Heatmap */}
+                <HabitHeatMap habits={processedHabits} />
+
+                <section className="space-y-6">
+                    <div className="flex items-center gap-2 text-lg font-bold text-white">
+                        <Calendar size={20} className="text-[#FBFF00]" />
+                        <h2>Active Habits</h2>
                     </div>
 
-                    <div className="flex justify-end gap-3 mt-6">
-                        <Button type="button" variant="ghost" onClick={() => setIsModalOpen(false)}>Cancel</Button>
-                        <Button type="submit">Create Habit</Button>
+                    <div className="space-y-6">
+                        {processedHabits.map(habit => (
+                            <HabitCard
+                                key={habit.id}
+                                habit={habit}
+                                onToggle={handleToggle}
+                                onDelete={() => deleteHabit(habit.id)}
+                                onEdit={() => {
+                                    setEditingHabit(habit);
+                                    setIsModalOpen(true);
+                                }}
+                            />
+                        ))}
+                        {processedHabits.length === 0 && (
+                            <div className="text-center py-12 text-zinc-500 bg-zinc-900/30 rounded-3xl border border-zinc-800 border-dashed">
+                                <p>No habits yet. Start building your legacy!</p>
+                            </div>
+                        )}
                     </div>
-                </form>
-            </Modal>
+                </section>
+
+            </div>
         </div>
     );
 }

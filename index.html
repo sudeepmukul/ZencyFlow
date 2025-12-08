@@ -6,12 +6,313 @@
   <link rel="icon" type="image/svg+xml" href="/vite.svg" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>ZencyFlow</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Kanit:wght@800;900&family=Noto+Sans+Devanagari:wght@900&display=swap"
+    rel="stylesheet">
+  <style>
+    :root {
+      --zen-yellow: #FFFF00;
+      --zen-white: #FFFFFF;
+      --zen-bg: #1a1a1a;
+      --loop-duration: 3s;
+    }
+
+    body {
+      margin: 0;
+      padding: 0;
+      background-color: #000;
+      /* Ensure dark bg while loading */
+    }
+
+    .initial-loader {
+      background-color: var(--zen-bg);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      width: 100vw;
+      overflow: hidden;
+      font-family: 'Kanit', sans-serif;
+      position: absolute;
+      /* cover everything */
+      top: 0;
+      left: 0;
+    }
+
+    .logo-wrapper {
+      position: relative;
+      padding: 2rem;
+      transform: scale(0.8);
+    }
+
+    .zen-logo {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      position: relative;
+      z-index: 2;
+    }
+
+    .logo-top {
+      display: flex;
+      align-items: baseline;
+      font-size: 5rem;
+      font-weight: 900;
+      letter-spacing: -4px;
+      line-height: 0.7;
+      position: relative;
+      transform: translateX(-2px);
+    }
+
+    .char-z {
+      color: var(--zen-yellow);
+      text-shadow: 4px 4px 0px rgba(0, 0, 0, 0.5);
+      opacity: 0;
+      animation: loaderSlideLeft var(--loop-duration) ease-in-out infinite;
+      animation-delay: 0.0s;
+    }
+
+    .char-en {
+      color: var(--zen-white);
+      text-shadow: 4px 4px 0px rgba(0, 0, 0, 0.5);
+      opacity: 0;
+      margin: 0 -2px;
+      animation: loaderSlideDown var(--loop-duration) ease-in-out infinite;
+      animation-delay: 0.1s;
+    }
+
+    .char-si {
+      font-family: 'Noto Sans Devanagari', sans-serif;
+      font-weight: 900;
+      color: var(--zen-yellow);
+      text-shadow: 4px 4px 0px rgba(0, 0, 0, 0.5);
+      font-size: 1.05em;
+      transform: translateY(-2px);
+      margin-left: -2px;
+      opacity: 0;
+      animation: loaderGlitch var(--loop-duration) ease-out infinite;
+      animation-delay: 0.2s;
+    }
+
+    .logo-bottom {
+      font-size: 5rem;
+      font-weight: 900;
+      color: var(--zen-white);
+      text-transform: uppercase;
+      text-shadow: 4px 4px 0px rgba(0, 0, 0, 0.5);
+      letter-spacing: -3px;
+      margin-top: -45px;
+      opacity: 0;
+      animation: loaderRise var(--loop-duration) ease-in-out infinite;
+      animation-delay: 0.3s;
+    }
+
+    .bolt-container {
+      position: absolute;
+      top: -35px;
+      left: 50%;
+      transform: translateX(-55%) rotate(15deg);
+      z-index: 10;
+      pointer-events: none;
+    }
+
+    .bolt {
+      width: 65px;
+      height: 95px;
+      fill: var(--zen-white);
+      filter: drop-shadow(0 0 10px rgba(255, 255, 255, 0.8));
+      opacity: 0;
+      animation: loaderStrike var(--loop-duration) ease-out infinite;
+      animation-delay: 0.5s;
+    }
+
+    .loading-text {
+      margin-top: 2rem;
+      color: rgba(255, 255, 255, 0.3);
+      font-size: 1rem;
+      letter-spacing: 4px;
+      text-transform: uppercase;
+      animation: pulseText 1.5s ease-in-out infinite;
+    }
+
+    @keyframes loaderSlideLeft {
+      0% {
+        opacity: 0;
+        transform: translateX(-40px);
+      }
+
+      15%,
+      70% {
+        opacity: 1;
+        transform: translateX(0);
+      }
+
+      90%,
+      100% {
+        opacity: 0;
+        transform: translateX(-10px) scale(0.9);
+      }
+    }
+
+    @keyframes loaderSlideDown {
+      0% {
+        opacity: 0;
+        transform: translateY(-40px);
+      }
+
+      15%,
+      70% {
+        opacity: 1;
+        transform: translateY(0);
+      }
+
+      90%,
+      100% {
+        opacity: 0;
+        transform: translateY(-10px) scale(0.9);
+      }
+    }
+
+    @keyframes loaderGlitch {
+      0% {
+        opacity: 0;
+        filter: blur(10px);
+        transform: scale(1.2) translateY(-2px);
+      }
+
+      15% {
+        opacity: 1;
+        filter: blur(0px);
+        transform: scale(1) translateY(-2px);
+      }
+
+      20% {
+        opacity: 0.8;
+        filter: blur(2px);
+        transform: scale(1.05) translateY(-2px);
+      }
+
+      25%,
+      70% {
+        opacity: 1;
+        filter: blur(0px);
+        transform: scale(1) translateY(-2px);
+      }
+
+      90%,
+      100% {
+        opacity: 0;
+        filter: blur(10px);
+        transform: scale(0.8) translateY(-2px);
+      }
+    }
+
+    @keyframes loaderRise {
+      0% {
+        opacity: 0;
+        transform: translateY(40px) scale(0.9);
+      }
+
+      15%,
+      70% {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+      }
+
+      90%,
+      100% {
+        opacity: 0;
+        transform: translateY(10px) scale(0.95);
+      }
+    }
+
+    @keyframes loaderStrike {
+      0% {
+        opacity: 0;
+        transform: scale(0) rotate(0deg);
+      }
+
+      10% {
+        opacity: 1;
+        transform: scale(1.4) rotate(-10deg);
+      }
+
+      20% {
+        transform: scale(1) rotate(0deg);
+      }
+
+      40% {
+        transform: scale(1.1) rotate(5deg);
+      }
+
+      45% {
+        transform: scale(1) rotate(0deg);
+      }
+
+      70% {
+        opacity: 1;
+        transform: scale(1) rotate(0deg);
+      }
+
+      90%,
+      100% {
+        opacity: 0;
+        transform: scale(0.5) rotate(0deg);
+      }
+    }
+
+    @keyframes pulseText {
+
+      0%,
+      100% {
+        opacity: 0.3;
+      }
+
+      50% {
+        opacity: 0.7;
+      }
+    }
+
+    @media (max-width: 600px) {
+
+      .logo-top,
+      .logo-bottom {
+        font-size: 3rem;
+      }
+
+      .bolt {
+        width: 40px;
+        height: 60px;
+        top: -15px;
+      }
+    }
+  </style>
 </head>
 
 <body>
-  <div id="root" style="background-color: #111; color: #fff; padding: 20px; font-family: sans-serif;">
-    <h1>Initializing ZencyFlow...</h1>
-    <p>If this message persists, JavaScript or React failed to load.</p>
+  <div id="root">
+    <!-- Initial Loader (Replaced by React) -->
+    <div class="initial-loader">
+      <div class="logo-wrapper">
+        <div class="bolt-container">
+          <svg class="bolt" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            <path d="M13 2L3 14H12L11 22L21 10H12L13 2Z" />
+          </svg>
+        </div>
+        <div class="zen-logo">
+          <div class="logo-top">
+            <span class="char-z">Z</span>
+            <span class="char-en">EN</span>
+            <span class="char-si">सी</span>
+          </div>
+          <div class="logo-bottom">FLOW</div>
+        </div>
+      </div>
+      <div class="loading-text">Loading</div>
+    </div>
   </div>
   <script type="module" src="/src/main.jsx"></script>
 </body>

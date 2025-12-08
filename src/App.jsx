@@ -12,26 +12,30 @@ import { Journal } from './features/journal/Journal';
 import { Calendar } from './features/calendar/Calendar';
 import { Settings } from './features/settings/Settings';
 
+import { ToastProvider } from './contexts/ToastContext';
+
 function App() {
     return (
         <BrowserRouter>
-            <UserProvider>
-                <DataProvider>
-                    <Routes>
-                        <Route path="/" element={<Layout />}>
-                            <Route index element={<Dashboard />} />
-                            <Route path="goals" element={<Goals />} />
-                            <Route path="habits" element={<Habits />} />
-                            <Route path="todo" element={<Todo />} />
-                            <Route path="sleep" element={<Sleep />} />
-                            <Route path="journal" element={<Journal />} />
-                            <Route path="calendar" element={<Calendar />} />
-                            <Route path="settings" element={<Settings />} />
-                            <Route path="*" element={<Navigate to="/" replace />} />
-                        </Route>
-                    </Routes>
-                </DataProvider>
-            </UserProvider>
+            <ToastProvider>
+                <UserProvider>
+                    <DataProvider>
+                        <Routes>
+                            <Route path="/" element={<Layout />}>
+                                <Route index element={<Dashboard />} />
+                                <Route path="goals" element={<Goals />} />
+                                <Route path="habits" element={<Habits />} />
+                                <Route path="todo" element={<Todo />} />
+                                <Route path="sleep" element={<Sleep />} />
+                                <Route path="journal" element={<Journal />} />
+                                <Route path="calendar" element={<Calendar />} />
+                                <Route path="settings" element={<Settings />} />
+                                <Route path="*" element={<Navigate to="/" replace />} />
+                            </Route>
+                        </Routes>
+                    </DataProvider>
+                </UserProvider>
+            </ToastProvider>
         </BrowserRouter>
     );
 }

@@ -167,7 +167,7 @@ export function Settings() {
 
     return (
         <div className="space-y-8 max-w-4xl mx-auto">
-            <h1 className="text-3xl font-bold text-white">Settings</h1>
+            <h1 className="text-4xl md:text-5xl font-bold bg-gradient-to-r from-white via-white to-zinc-500 bg-clip-text text-transparent">Settings</h1>
 
             {/* Profile Settings */}
             <Card>
