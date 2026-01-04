@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Target, CheckSquare, ListTodo, Moon, Book, Calendar, Settings, PanelLeftClose } from 'lucide-react';
+import { LayoutDashboard, Target, CheckSquare, ListTodo, Moon, Book, Calendar, Settings, PanelLeftClose, Gift } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import AnimatedLogo from '../common/AnimatedLogo';
+import { useUser } from '../../contexts/UserContext';
 
 const navItems = [
     { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
@@ -12,10 +13,13 @@ const navItems = [
     { to: '/sleep', icon: Moon, label: 'Sleep' },
     { to: '/journal', icon: Book, label: 'Journal' },
     { to: '/calendar', icon: Calendar, label: 'Calendar' },
+    { to: '/rewards', icon: Gift, label: 'Rewards' },
     { to: '/settings', icon: Settings, label: 'Settings' },
 ];
 
 export function Sidebar({ isOpen, onToggle }) {
+    const { user } = useUser(); // Access dynamic user data
+
     return (
         <aside className={cn(
             "h-screen flex flex-col overflow-y-auto flex-shrink-0 bg-transparent relative z-20 transition-all duration-300 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden",
@@ -86,16 +90,19 @@ export function Sidebar({ isOpen, onToggle }) {
                 )}>
                     <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-neon-400 to-purple-500 p-[1px] flex-shrink-0">
                         <div className="w-full h-full rounded-full bg-black flex items-center justify-center overflow-hidden">
-                            {/* Avatar Placeholder */}
-                            <div className="w-full h-full bg-zinc-800 flex items-center justify-center text-xs font-bold text-neon-400">
-                                U
-                            </div>
+                            {user.photoURL ? (
+                                <img src={user.photoURL} alt="Profile" className="w-full h-full object-cover" />
+                            ) : (
+                                <div className="w-full h-full bg-zinc-800 flex items-center justify-center text-xs font-bold text-neon-400">
+                                    {(user.name || 'U').charAt(0).toUpperCase()}
+                                </div>
+                            )}
                         </div>
                     </div>
                     {isOpen && (
                         <div className="overflow-hidden">
-                            <p className="text-sm font-semibold text-white truncate">Zency User</p>
-                            <p className="text-xs text-zinc-400 truncate">Level 1 • Novice</p>
+                            <p className="text-sm font-semibold text-white truncate">{user.name || 'Zency User'}</p>
+                            <p className="text-xs text-zinc-400 truncate">Level {user.level || 0} • {user.level < 5 ? 'Novice' : user.level < 10 ? 'Adept' : 'Master'}</p>
                         </div>
                     )}
                 </div>

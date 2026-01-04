@@ -19,10 +19,14 @@ export const EventItem = ({ event, style, onDragStart }) => {
         <div
             draggable={true}
             onDragStart={(e) => onDragStart(e, event)}
-            className={`absolute w-[95%] left-[2.5%] rounded-md px-2 py-1 text-xs cursor-grab active:cursor-grabbing transition-all hover:brightness-110 overflow-hidden border z-10 shadow-sm ${textColor} ${borderColor}`}
+            className={`absolute rounded-md px-2 py-1 text-xs cursor-grab active:cursor-grabbing transition-all hover:brightness-110 overflow-hidden border z-10 shadow-sm ${textColor} ${borderColor}`}
             style={{
                 ...style,
                 backgroundColor: bgColor,
+                // Add small gap for visual separation when stacking
+                width: style?.width ? `calc(${style.width} - 4px)` : '95%',
+                left: style?.left || '2.5%',
+                marginLeft: '2px'
             }}
         >
             <div className="font-medium truncate leading-tight pointer-events-none">

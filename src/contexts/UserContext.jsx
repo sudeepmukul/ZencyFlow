@@ -1,8 +1,11 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { db } from '../lib/db';
+import { db as firestore } from '../lib/firebase';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { useXP } from '../hooks/useXP';
 import confetti from 'canvas-confetti';
 import { useToast } from './ToastContext';
+import { useAuth } from './AuthContext';
 
 const UserContext = createContext();
 
@@ -18,6 +21,8 @@ export const UserProvider = ({ children }) => {
 
     const [isLoading, setIsLoading] = useState(true);
 
+    const { currentUser } = useAuth(); // NEW: Access Google User
+
     useEffect(() => {
         let mounted = true;
         const loadUser = async () => {
@@ -30,15 +35,83 @@ export const UserProvider = ({ children }) => {
 
                 if (mounted) {
                     if (userData) {
-                        setUser(userData);
+                        let finalUser = userData;
+
+                        // CLOUD SYNC: Pull Profile on Login
+                        if (currentUser) {
+                            try {
+                                const userDocRef = doc(firestore, 'users', currentUser.uid);
+                                const userSnap = await getDoc(userDocRef);
+
+                                if (userSnap.exists()) {
+                                    const cloudData = userSnap.data();
+                                    const cloudTime = new Date(cloudData.updatedAt || 0).getTime();
+                                    const localTime = new Date(userData.updatedAt || 0).getTime();
+
+                                    if (cloudTime > localTime) {
+                                        console.log('[Profile Sync] Cloud is newer, updating local.');
+                                        finalUser = { ...userData, ...cloudData };
+                                        await db.put('user', finalUser);
+                                    } else if (localTime > cloudTime) {
+                                        // Local is newer (offline changes?), push to cloud
+                                        console.log('[Profile Sync] Local is newer, pushing to cloud.');
+                                        await setDoc(userDocRef, userData, { merge: true });
+                                    }
+                                } else {
+                                    // First time valid login but no cloud data? Push local.
+                                    console.log('[Profile Sync] No cloud profile, creating.');
+                                    await setDoc(userDocRef, { ...userData, updatedAt: new Date().toISOString() }, { merge: true });
+                                }
+                            } catch (err) {
+                                console.error('[Profile Sync] Failed to check cloud:', err);
+                            }
+                        }
+
+                        // SYNC: Check if we should update profile from Google (Name/Photo)
+                        let updates = {};
+                        if (currentUser) {
+                            if (finalUser.name === 'Zen Master' && currentUser.displayName) {
+                                updates.name = currentUser.displayName;
+                            }
+                            if (currentUser.photoURL && finalUser.photoURL !== currentUser.photoURL) {
+                                updates.photoURL = currentUser.photoURL;
+                            }
+                        }
+
+                        if (Object.keys(updates).length > 0) {
+                            const mergedUser = { ...finalUser, ...updates, updatedAt: new Date().toISOString() };
+
+                            // Ensure hasOnboarded exists (Migration for existing users/stale guests)
+                            if (mergedUser.hasOnboarded === undefined) {
+                                mergedUser.hasOnboarded = false;
+                            }
+
+                            setUser(mergedUser);
+                            await db.put('user', mergedUser);
+                            // Also sync this update to cloud
+                            if (currentUser) {
+                                const userDocRef = doc(firestore, 'users', currentUser.uid);
+                                await setDoc(userDocRef, mergedUser, { merge: true });
+                            }
+                        } else {
+                            // Even if no other updates, ensure hasOnboarded exists
+                            if (finalUser.hasOnboarded === undefined) {
+                                finalUser.hasOnboarded = false;
+                                await db.put('user', finalUser);
+                            }
+                            setUser(finalUser);
+                        }
+
                     } else {
                         // Initial user setup
                         const initialUser = {
                             id: 'profile',
                             xp: 0,
                             level: 0,
-                            name: 'Zen Master',
-                            settings: { theme: 'neon' }
+                            name: currentUser?.displayName || 'Zen Master',
+                            photoURL: currentUser?.photoURL || null,
+                            settings: { theme: 'neon' },
+                            hasOnboarded: false
                         };
                         await db.put('user', initialUser);
                         setUser(initialUser);
@@ -51,22 +124,34 @@ export const UserProvider = ({ children }) => {
                         id: 'profile',
                         xp: 0,
                         level: 0,
-                        name: 'Zen Master (Offline)',
-                        settings: { theme: 'neon' }
+                        name: currentUser?.displayName || 'Zen Master (Offline)',
+                        photoURL: currentUser?.photoURL || null,
+                        settings: { theme: 'neon' },
+                        hasOnboarded: false
                     });
                 }
             } finally {
                 if (mounted) setIsLoading(false);
             }
         };
+        // Re-run loadUser when currentUser changes to catch the login event
         loadUser();
         return () => { mounted = false; };
-    }, []);
+    }, [currentUser]);
 
     const updateProfile = async (updates) => {
-        const updatedUser = { ...user, ...updates };
+        const updatedUser = { ...user, ...updates, updatedAt: new Date().toISOString() };
         await db.put('user', updatedUser);
         setUser(updatedUser);
+
+        if (currentUser) {
+            try {
+                const userDocRef = doc(firestore, 'users', currentUser.uid);
+                await setDoc(userDocRef, updatedUser, { merge: true });
+            } catch (error) {
+                console.error("Failed to sync profile update:", error);
+            }
+        }
     };
 
     const addXP = async (amount) => {
@@ -130,6 +215,10 @@ export const UserProvider = ({ children }) => {
     };
 
     // Helper to queue unlock
+    const completeOnboarding = async () => {
+        await updateProfile({ hasOnboarded: true });
+    };
+
     const unlockBadge = async (badgeId) => {
         // This exists for manual calling if needed, but primary logic is now in checkAchievements
         const currentBadges = user.badges || [];
@@ -177,6 +266,7 @@ export const UserProvider = ({ children }) => {
         addInventoryItem,
         useInventoryItem,
         unlockBadge,
+        completeOnboarding,
         checkAchievements: async (tasks, habits) => {
             const now = new Date();
             const todayStr = now.toISOString().split('T')[0];

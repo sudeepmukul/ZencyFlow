@@ -3,22 +3,28 @@ import { useData } from '../../contexts/DataContext';
 import { useUser } from '../../contexts/UserContext';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
-import { Trash2, Download, Upload, AlertTriangle, Plus, Clock, Bell, Award } from 'lucide-react';
+import { Trash2, Download, Upload, AlertTriangle, Plus, Clock, Bell, Award, Cloud, Database } from 'lucide-react';
+import { useAuth } from '../../contexts/AuthContext';
+import { db as firebaseDb } from '../../lib/firebase';
+import { collection, writeBatch, doc } from 'firebase/firestore';
 import { NotificationManager } from '../../lib/notifications';
 import { Badges } from '../profile/Badges';
 import { db } from '../../lib/db';
+import { DataMigrationModal } from './DataMigrationModal';
 
 export function Settings() {
     const { user, updateProfile } = useUser();
+    const { currentUser, login, logout } = useAuth();
+    const [isMigrating, setIsMigrating] = useState(false);
     const {
-        goals, habits, tasks, sleepLogs, journalEntries, categories,
+        goals, habits, tasks, sleepLogs, journalEntries, categories, rewards,
         addCategory, deleteCategory, refreshData,
-        timerSettings, updateTimerSettings
+        timerSettings, updateTimerSettings, pushAllToCloud
     } = useData();
 
-    const [importFile, setImportFile] = useState(null);
     const [newName, setNewName] = useState(user.name);
     const [newCategory, setNewCategory] = useState('');
+    const [isMigrationModalOpen, setIsMigrationModalOpen] = useState(false);
 
     const handleUpdateProfile = async (e) => {
         e.preventDefault();
@@ -34,58 +40,6 @@ export function Settings() {
         }
     };
 
-    const handleExport = async () => {
-        const data = {
-            user,
-            goals,
-            habits,
-            tasks,
-            sleepLogs,
-            journalEntries,
-            categories,
-            exportedAt: new Date().toISOString()
-        };
-
-        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `zency-backup-${new Date().toISOString().split('T')[0]}.json`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-    };
-
-    const handleImport = async () => {
-        if (!importFile) return;
-
-        const reader = new FileReader();
-        reader.onload = async (e) => {
-            try {
-                const data = JSON.parse(e.target.result);
-
-                if (window.confirm('This will overwrite your current data. Are you sure?')) {
-                    if (data.user) await db.put('user', data.user);
-                    if (data.goals) for (const g of data.goals) await db.put('goals', g);
-                    if (data.habits) for (const h of data.habits) await db.put('habits', h);
-                    if (data.tasks) for (const t of data.tasks) await db.put('tasks', t);
-                    if (data.sleepLogs) for (const s of data.sleepLogs) await db.put('sleep_logs', s);
-                    if (data.journalEntries) for (const j of data.journalEntries) await db.put('journal_entries', j);
-                    if (data.categories) for (const c of data.categories) await db.put('categories', c);
-
-                    await refreshData();
-                    alert('Data imported successfully! Please refresh the page.');
-                    window.location.reload();
-                }
-            } catch (err) {
-                console.error(err);
-                alert('Failed to import data. Invalid JSON.');
-            }
-        };
-        reader.readAsText(importFile);
-    };
-
     const handleClearAll = async () => {
         if (window.confirm('DANGER: This will permanently delete ALL your data. This cannot be undone. Are you sure?')) {
             const req = indexedDB.deleteDatabase('ZencyDB');
@@ -96,6 +50,25 @@ export function Settings() {
             req.onerror = () => {
                 alert('Failed to delete database.');
             };
+        }
+    };
+
+    const handleForceSync = async () => {
+        if (!currentUser) return alert('Please sign in first.');
+
+        setIsMigrating(true);
+        try {
+            const success = await pushAllToCloud();
+            if (success) {
+                alert('✅ Sync Complete! All your data (including habits, tasks, timer logs, calendar events, etc.) is now backed up to the cloud.');
+            } else {
+                alert('Sync failed. Please check the console for details.');
+            }
+        } catch (error) {
+            console.error(error);
+            alert('Sync failed: ' + error.message);
+        } finally {
+            setIsMigrating(false);
         }
     };
 
@@ -168,6 +141,49 @@ export function Settings() {
     return (
         <div className="space-y-8 max-w-4xl mx-auto">
             <h1 className="text-4xl md:text-5xl font-bold bg-gradient-to-r from-white via-white to-zinc-500 bg-clip-text text-transparent">Settings</h1>
+
+            {/* Account & Cloud Sync */}
+            <Card>
+                <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                        <Cloud className="w-5 h-5 text-neon-400" /> Cloud Sync
+                    </h2>
+                    {currentUser && (
+                        <span className="text-sm text-green-400 font-mono bg-green-900/20 px-2 py-1 rounded">
+                            Connected: {currentUser.email}
+                        </span>
+                    )}
+                </div>
+
+                {!currentUser ? (
+                    <div className="text-center py-6">
+                        <p className="text-zinc-400 mb-4">Sign in with Google to sync your data across devices.</p>
+                        <Button variant="primary" onClick={login}>
+                            Sign in with Google
+                        </Button>
+                    </div>
+                ) : (
+                    <div className="space-y-4">
+                        <div className="p-4 bg-zinc-900/50 border border-zinc-800 rounded-lg flex items-center justify-between">
+                            <div>
+                                <h3 className="font-bold text-white flex items-center gap-2">
+                                    <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
+                                    Sync Active
+                                </h3>
+                                <p className="text-xs text-zinc-400">Your data is automatically saved to your account.</p>
+                            </div>
+                            <Button onClick={handleForceSync} disabled={isMigrating} variant="secondary" size="sm">
+                                {isMigrating ? <Upload className="w-4 h-4 animate-bounce" /> : <Upload className="w-4 h-4" />}
+                                {isMigrating ? 'Syncing...' : 'Force Sync Now'}
+                            </Button>
+                        </div>
+
+                        <div className="flex justify-end">
+                            <Button variant="danger" onClick={logout}>Sign Out</Button>
+                        </div>
+                    </div>
+                )}
+            </Card>
 
             {/* Profile Settings */}
             <Card>
@@ -317,62 +333,50 @@ export function Settings() {
 
             {/* Data Management */}
             <Card>
-                <h2 className="text-xl font-bold text-white mb-6">Data Management</h2>
+                <h2 className="text-xl font-bold text-white mb-6">Data Management & Backup</h2>
 
-                <div className="space-y-6">
-                    <div className="flex items-center justify-between p-4 bg-zinc-900/50 rounded-lg border border-zinc-800">
-                        <div>
-                            <h3 className="font-bold text-white">Export Data</h3>
-                            <p className="text-sm text-zinc-400">Download a backup of all your data as JSON.</p>
-                        </div>
-                        <Button onClick={handleExport}>
-                            <Download className="w-4 h-4" /> Export
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                    <div className="p-4 bg-neon-400/5 rounded-lg border border-neon-400/20">
+                        <h3 className="font-bold text-white mb-1 flex items-center gap-2">
+                            <Database className="w-4 h-4 text-neon-400" />
+                            Migration Assistant
+                        </h3>
+                        <p className="text-xs text-zinc-400 mb-3">
+                            Export your data to JSON or import standard backups. Auto-merges missing data (safe import).
+                        </p>
+                        <Button onClick={() => setIsMigrationModalOpen(true)} className="w-full bg-neon-400 text-black hover:bg-neon-300">
+                            Open Migration Tool
                         </Button>
                     </div>
 
-                    <div className="flex items-center justify-between p-4 bg-blue-500/10 rounded-lg border border-blue-500/30">
-                        <div>
-                            <h3 className="font-bold text-white flex items-center gap-2">
-                                📦 Monthly Archive
-                            </h3>
-                            <p className="text-sm text-zinc-400">Export & reset for new month (keeps Goals & Habits only)</p>
-                        </div>
-                        <Button onClick={handleMonthlyArchive} variant="primary">
+                    <div className="p-4 bg-blue-500/10 rounded-lg border border-blue-500/30">
+                        <h3 className="font-bold text-white flex items-center gap-2 mb-1">
+                            📦 Monthly Archive
+                        </h3>
+                        <p className="text-xs text-zinc-400 mb-3">Export & reset tasks/history for new month.</p>
+                        <Button onClick={handleMonthlyArchive} variant="primary" className="w-full">
                             Archive & Reset
                         </Button>
                     </div>
+                </div>
 
-                    <div className="flex items-center justify-between p-4 bg-zinc-900/50 rounded-lg border border-zinc-800">
-                        <div>
-                            <h3 className="font-bold text-white">Import Data</h3>
-                            <p className="text-sm text-zinc-400">Restore your data from a backup file.</p>
-                        </div>
-                        <div className="flex items-center gap-2">
-                            <input
-                                type="file"
-                                accept=".json"
-                                onChange={(e) => setImportFile(e.target.files[0])}
-                                className="text-sm text-zinc-400 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-zinc-800 file:text-white hover:file:bg-zinc-700"
-                            />
-                            <Button onClick={handleImport} disabled={!importFile}>
-                                <Upload className="w-4 h-4" /> Import
-                            </Button>
-                        </div>
+                <div className="flex items-center justify-between p-4 bg-red-500/5 rounded-lg border border-red-500/20">
+                    <div>
+                        <h3 className="font-bold text-red-500 flex items-center gap-2">
+                            <AlertTriangle className="w-4 h-4" /> Danger Zone
+                        </h3>
+                        <p className="text-sm text-red-400/70">Permanently delete all your data and reset the app.</p>
                     </div>
-
-                    <div className="flex items-center justify-between p-4 bg-red-500/5 rounded-lg border border-red-500/20">
-                        <div>
-                            <h3 className="font-bold text-red-500 flex items-center gap-2">
-                                <AlertTriangle className="w-4 h-4" /> Danger Zone
-                            </h3>
-                            <p className="text-sm text-red-400/70">Permanently delete all your data and reset the app.</p>
-                        </div>
-                        <Button variant="danger" onClick={handleClearAll}>
-                            <Trash2 className="w-4 h-4" /> Clear All Data
-                        </Button>
-                    </div>
+                    <Button variant="danger" onClick={handleClearAll}>
+                        <Trash2 className="w-4 h-4" /> Clear All
+                    </Button>
                 </div>
             </Card>
+
+            <DataMigrationModal
+                isOpen={isMigrationModalOpen}
+                onClose={() => setIsMigrationModalOpen(false)}
+            />
         </div>
     );
 }

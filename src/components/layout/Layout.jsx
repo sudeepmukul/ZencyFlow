@@ -10,10 +10,18 @@ import { PanelLeftOpen } from 'lucide-react';
 export function Layout() {
     const { tasks, habits, habitLogs } = useData();
     const lastNotificationRef = useRef({});
-    const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+    const [isSidebarOpen, setIsSidebarOpen] = useState(window.innerWidth > 768);
 
     useEffect(() => {
         NotificationManager.requestPermission();
+
+        // Optional: Auto-collapse on resize to mobile
+        const handleResize = () => {
+            if (window.innerWidth < 768) setIsSidebarOpen(false);
+            else setIsSidebarOpen(true);
+        };
+        window.addEventListener('resize', handleResize);
+        return () => window.removeEventListener('resize', handleResize);
     }, []);
 
     useEffect(() => {
@@ -92,7 +100,6 @@ export function Layout() {
             <div className="breathing-bg"></div>
 
             {/* Sidebar with toggle prop */}
-            {/* Sidebar with toggle prop */}
             <div className={`transition-all duration-300 ease-in-out ${isSidebarOpen ? 'w-64' : 'w-20'} flex-shrink-0 relative`}>
                 <div className={`h-full absolute top-0 left-0 transition-all duration-300 ${isSidebarOpen ? 'w-64' : 'w-20'}`}>
                     <Sidebar
@@ -102,8 +109,8 @@ export function Layout() {
                 </div>
             </div>
 
-            <main className="flex-1 overflow-y-auto glass-panel m-4 rounded-[30px] border border-white/10 relative z-10">
-                <div className="max-w-7xl mx-auto p-8">
+            <main id="main-content" className="flex-1 overflow-y-auto glass-panel m-0 md:m-4 rounded-none md:rounded-[30px] border-0 md:border border-white/10 relative z-10">
+                <div className="max-w-7xl mx-auto p-4 md:p-8">
                     <Outlet />
                 </div>
             </main>

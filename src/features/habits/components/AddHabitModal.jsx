@@ -14,9 +14,11 @@ export const AddHabitModal = ({ isOpen, onClose, onAdd, initialData }) => {
     const [title, setTitle] = useState('');
     const [selectedCategory, setSelectedCategory] = useState(CATEGORIES[0].name);
     const [selectedIcon, setSelectedIcon] = useState(PREDEFINED_ICONS[0]);
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
     useEffect(() => {
         if (isOpen) {
+            setIsSubmitting(false); // Reset on open
             if (initialData) {
                 setTitle(initialData.title || '');
                 setSelectedCategory(initialData.category || CATEGORIES[0].name);
@@ -32,18 +34,24 @@ export const AddHabitModal = ({ isOpen, onClose, onAdd, initialData }) => {
 
     if (!isOpen) return null;
 
-    const handleSubmit = (e) => {
+    const handleSubmit = async (e) => {
         e.preventDefault();
-        if (!title.trim()) return;
+        if (!title.trim() || isSubmitting) return;
 
-        onAdd({
-            id: initialData?.id,
-            title,
-            category: selectedCategory,
-            icon: selectedIcon
-        });
-
-        onClose();
+        setIsSubmitting(true);
+        try {
+            await onAdd({
+                id: initialData?.id,
+                title,
+                category: selectedCategory,
+                icon: selectedIcon
+            });
+            onClose();
+        } catch (error) {
+            console.error("Error submitting habit:", error);
+        } finally {
+            setIsSubmitting(false);
+        }
     };
 
     return (
@@ -69,6 +77,7 @@ export const AddHabitModal = ({ isOpen, onClose, onAdd, initialData }) => {
                                 placeholder="e.g. Read 10 pages"
                                 className="w-full rounded-xl border border-white/10 bg-black/40 px-4 py-3 text-white placeholder-gray-600 focus:border-[#FBFF00] focus:outline-none focus:ring-1 focus:ring-[#FBFF00]"
                                 autoFocus
+                                disabled={isSubmitting}
                             />
                         </div>
                         <div className="space-y-2">
@@ -79,10 +88,11 @@ export const AddHabitModal = ({ isOpen, onClose, onAdd, initialData }) => {
                                         key={icon}
                                         type="button"
                                         onClick={() => setSelectedIcon(icon)}
+                                        disabled={isSubmitting}
                                         className={`flex h-10 w-10 items-center justify-center rounded-lg text-lg transition-all ${selectedIcon === icon
                                             ? 'bg-[#FBFF00] text-black scale-110'
                                             : 'bg-white/5 text-white hover:bg-white/10'
-                                            }`}
+                                            } ${isSubmitting ? 'opacity-50 cursor-not-allowed' : ''}`}
                                     >
                                         {icon}
                                     </button>
@@ -97,10 +107,11 @@ export const AddHabitModal = ({ isOpen, onClose, onAdd, initialData }) => {
                                         key={cat.name}
                                         type="button"
                                         onClick={() => setSelectedCategory(cat.name)}
+                                        disabled={isSubmitting}
                                         className={`rounded-full px-4 py-1.5 text-xs font-bold transition-all border ${selectedCategory === cat.name
                                             ? 'border-[#FBFF00] bg-[#FBFF00] text-black'
                                             : `border-white/10 bg-white/5 text-gray-400 hover:bg-white/10`
-                                            }`}
+                                            } ${isSubmitting ? 'opacity-50 cursor-not-allowed' : ''}`}
                                     >
                                         {cat.name}
                                     </button>
@@ -109,9 +120,10 @@ export const AddHabitModal = ({ isOpen, onClose, onAdd, initialData }) => {
                         </div>
                         <button
                             type="submit"
-                            className="mt-4 w-full rounded-xl bg-[#FBFF00] py-4 text-center font-bold text-black shadow-[0_0_20px_rgba(251,255,0,0.3)] transition-all hover:bg-[#e1e600] hover:scale-[1.02] active:scale-95"
+                            disabled={isSubmitting}
+                            className={`mt-4 w-full rounded-xl bg-[#FBFF00] py-4 text-center font-bold text-black shadow-[0_0_20px_rgba(251,255,0,0.3)] transition-all hover:bg-[#e1e600] hover:scale-[1.02] active:scale-95 ${isSubmitting ? 'opacity-70 cursor-wait' : ''}`}
                         >
-                            {initialData ? 'Save Changes' : 'Create Habit'}
+                            {isSubmitting ? 'Saving...' : (initialData ? 'Save Changes' : 'Create Habit')}
                         </button>
                     </form>
                 </div>

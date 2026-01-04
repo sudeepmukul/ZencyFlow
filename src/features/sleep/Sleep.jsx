@@ -297,8 +297,8 @@ export function Sleep() {
                                             </td>
                                             <td className="py-4">
                                                 <span className={`px-2 py-1 rounded-full text-xs font-medium border ${log.hours >= 8
-                                                        ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-                                                        : 'bg-red-500/10 text-red-400 border-red-500/20'
+                                                    ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                                                    : 'bg-red-500/10 text-red-400 border-red-500/20'
                                                     }`}>
                                                     {log.hours >= 8 ? 'Good Rest' : 'Sleep Debt'}
                                                 </span>
@@ -339,13 +339,17 @@ export function Sleep() {
                 <form onSubmit={handleSave} className="space-y-6">
                     <div className="space-y-2">
                         <label className="text-xs uppercase font-bold text-zinc-500 tracking-wider ml-1">Date</label>
-                        <div className="relative">
+                        <div
+                            className="relative cursor-pointer"
+                            onClick={() => document.getElementById('sleep-date-input').showPicker()}
+                        >
                             <input
+                                id="sleep-date-input"
                                 type="date"
                                 required
                                 value={selectedDate}
                                 onChange={(e) => setSelectedDate(e.target.value)}
-                                className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-1 transition-all [color-scheme:dark]"
+                                className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-1 transition-all [color-scheme:dark] cursor-pointer [&::-webkit-calendar-picker-indicator]:hidden"
                                 style={{ '--tw-ring-color': NEON_YELLOW, '--tw-border-opacity': 1 }}
                                 onFocus={(e) => e.target.style.borderColor = NEON_YELLOW}
                                 onBlur={(e) => e.target.style.borderColor = ''}

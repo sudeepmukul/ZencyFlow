@@ -1,7 +1,7 @@
 import { openDB } from 'idb';
 
 const DB_NAME = 'ZencyDB';
-const DB_VERSION = 4;
+const DB_VERSION = 5;
 
 export const initDB = async () => {
     return openDB(DB_NAME, DB_VERSION, {
@@ -59,6 +59,16 @@ export const initDB = async () => {
             // Calendar Layers store
             if (!db.objectStoreNames.contains('calendar_layers')) {
                 db.createObjectStore('calendar_layers', { keyPath: 'id' });
+            }
+            // Rewards store
+            if (!db.objectStoreNames.contains('rewards')) {
+                db.createObjectStore('rewards', { keyPath: 'id', autoIncrement: true });
+            }
+            // Reward History store
+            if (!db.objectStoreNames.contains('reward_history')) {
+                const store = db.createObjectStore('reward_history', { keyPath: 'id', autoIncrement: true });
+                store.createIndex('rewardId', 'rewardId');
+                store.createIndex('redeemedAt', 'redeemedAt');
             }
         },
         blocked() {

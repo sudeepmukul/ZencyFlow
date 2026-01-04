@@ -83,15 +83,21 @@ export function Habits() {
     };
 
     const handleSaveHabit = async (habitData) => {
-        if (habitData.id) {
-            // Update
-            await updateHabit(habitData);
-        } else {
-            // Create
-            await addHabit({
-                ...habitData,
-                frequency: 'daily',
-            });
+        try {
+            if (habitData.id) {
+                // Update
+                await updateHabit(habitData);
+            } else {
+                // Create - Remove 'id' so DB auto-generates it
+                const { id, ...newHabit } = habitData;
+                await addHabit({
+                    ...newHabit,
+                    frequency: 'daily',
+                });
+            }
+        } catch (error) {
+            console.error("Failed to save habit:", error);
+            alert("Failed to save habit. Please try again.");
         }
     };
 

@@ -4,11 +4,13 @@ import { useData } from '../../contexts/DataContext';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Input, Select } from '../../components/ui/Input';
-import { Plus, GripVertical, CheckCircle, Calendar, Trash2, Play, AlertCircle, Clock } from 'lucide-react';
+import { Plus, GripVertical, CheckCircle, Calendar, Trash2, Play, AlertCircle, Clock, RotateCw, Edit2, ChevronLeft, ChevronRight, Trophy, CheckCircle2, Circle } from 'lucide-react';
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { cn } from '../../lib/utils';
+import { QuestModal } from '../calendar/components/QuestModal';
+import { format, addDays, isSameDay } from 'date-fns';
 
 // Priority Colors
 const PRIORITY_COLORS = {
@@ -18,7 +20,7 @@ const PRIORITY_COLORS = {
 };
 
 // Sortable Item Component
-function SortableTaskItem({ task, onToggle, onDelete, onMoveToNextDay, onStartTimer, activeTimer, totalDuration }) {
+function SortableTaskItem({ task, onToggle, onDelete, onEdit, onMoveToNextDay, onStartTimer, activeTimer, totalDuration, onToggleSubtask }) {
     const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: task.id });
 
     const style = {
@@ -42,101 +44,173 @@ function SortableTaskItem({ task, onToggle, onDelete, onMoveToNextDay, onStartTi
     return (
         <div ref={setNodeRef} style={style} className={cn("mb-3", isDragging && "opacity-50")}>
             <Card className={cn(
-                "p-4 flex items-center gap-4 transition-all group",
+                "p-0 transition-all group overflow-hidden", // Removed p-4 flex ...
                 isActive ? "bg-neon-400/5 border-neon-400/30" : "bg-zinc-900/80 hover:border-neon-400/30",
                 isOverdue && "border-red-500/30 bg-red-500/5"
             )}>
-                <div {...attributes} {...listeners} className="cursor-grab active:cursor-grabbing text-zinc-600 hover:text-zinc-400">
-                    <GripVertical className="w-5 h-5" />
-                </div>
+                {/* Main Task Row */}
+                <div className="p-4 flex items-center gap-4">
+                    <div {...attributes} {...listeners} className="cursor-grab active:cursor-grabbing text-zinc-600 hover:text-zinc-400">
+                        <GripVertical className="w-5 h-5" />
+                    </div>
 
-                <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-1 flex-wrap">
-                        <h3 className={cn("font-medium", isActive ? "text-neon-400" : "text-white")}>
-                            {task.title}
-                        </h3>
+                    <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-1 flex-wrap">
+                            <h3 className={cn("font-medium", isActive ? "text-neon-400" : "text-white")}>
+                                {task.title}
+                            </h3>
 
-                        {/* Priority Badge */}
-                        <span className={cn("text-[10px] px-1.5 py-0.5 rounded border font-medium", PRIORITY_COLORS[task.priority || 'Medium'])}>
-                            {task.priority || 'Medium'}
-                        </span>
+                            {/* Priority Badge */}
+                            <span className={cn("text-[10px] px-1.5 py-0.5 rounded border font-medium", PRIORITY_COLORS[task.priority || 'Medium'])}>
+                                {task.priority || 'Medium'}
+                            </span>
 
-                        {/* Due Date Badge */}
-                        {task.dueDate && (
-                            <span className={cn(
-                                "text-[10px] px-1.5 py-0.5 rounded border flex items-center gap-1",
-                                isOverdue ? "text-red-400 border-red-400/20 bg-red-400/10" : "text-zinc-400 border-zinc-700 bg-zinc-800"
-                            )}>
-                                <Calendar className="w-3 h-3" />
-                                {new Date(task.dueDate).toLocaleDateString()}
-                            </span>
-                        )}
+                            {/* Due Date Badge */}
+                            {task.dueDate && (
+                                <span className={cn(
+                                    "text-[10px] px-1.5 py-0.5 rounded border flex items-center gap-1",
+                                    isOverdue ? "text-red-400 border-red-400/20 bg-red-400/10" : "text-zinc-400 border-zinc-700 bg-zinc-800"
+                                )}>
+                                    <Calendar className="w-3 h-3" />
+                                    {new Date(task.dueDate).toLocaleDateString()}
+                                    {task.dueDate.includes('T') && !task.dueDate.endsWith('00:00:00') && (
+                                        <span className="ml-1 opacity-75">
+                                            {format(new Date(task.dueDate), 'HH:mm')}
+                                        </span>
+                                    )}
+                                </span>
+                            )}
 
-                        {task.notes && (
-                            <span className="text-xs text-zinc-500 truncate max-w-[200px]" title={task.notes}>
-                                - {task.notes}
+                            {task.notes && (
+                                <span className="text-xs text-zinc-500 truncate max-w-[200px]" title={task.notes}>
+                                    - {task.notes}
+                                </span>
+                            )}
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400 border border-zinc-700">
+                                {task.category}
                             </span>
-                        )}
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400 border border-zinc-700">
-                            {task.category}
-                        </span>
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-neon-400/10 text-neon-400 border border-neon-400/20">
-                            +{task.xpValue} XP
-                        </span>
-                        {totalDuration > 0 && (
-                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20 flex items-center gap-1">
-                                <Play className="w-2 h-2" /> {formatDuration(totalDuration)}
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-neon-400/10 text-neon-400 border border-neon-400/20">
+                                +{task.xpValue} XP
                             </span>
+                            {totalDuration > 0 && (
+                                <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20 flex items-center gap-1">
+                                    <Play className="w-2 h-2" /> {formatDuration(totalDuration)}
+                                </span>
+                            )}
+                            {task.repeat === 'daily' && (
+                                <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-400 border border-purple-500/20 flex items-center gap-1" title="Daily Quest">
+                                    <RotateCw className="w-2.5 h-2.5" /> Daily
+                                </span>
+                            )}
+                            {isActive && (
+                                <span className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-neon-400 text-black font-bold animate-pulse">
+                                    <Play className="w-3 h-3 fill-current" /> Active
+                                </span>
+                            )}
+                        </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                        {!isActive && (
+                            <Button variant="ghost" size="icon" onClick={() => onStartTimer(task.id)} title="Start Timer" className="text-neon-400 hover:text-neon-300 hover:bg-neon-400/10">
+                                <Play className="w-4 h-4" />
+                            </Button>
                         )}
-                        {isActive && (
-                            <span className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-neon-400 text-black font-bold animate-pulse">
-                                <Play className="w-3 h-3 fill-current" /> Active
-                            </span>
-                        )}
+                        <Button variant="ghost" size="icon" onClick={() => onEdit(task)} title="Edit Task">
+                            <Edit2 className="w-4 h-4 text-zinc-400 hover:text-white" />
+                        </Button>
+                        <Button variant="ghost" size="icon" onClick={() => onMoveToNextDay(task)} title="Move to Next Day">
+                            <Calendar className="w-4 h-4 text-blue-400" />
+                        </Button>
+                        <Button variant="ghost" size="icon" onClick={() => onDelete(task.id)} title="Delete">
+                            <Trash2 className="w-4 h-4 text-red-500" />
+                        </Button>
+                        <Button variant="primary" size="sm" onClick={() => onToggle(task.id)} className="ml-2">
+                            <CheckCircle className="w-4 h-4" /> Done
+                        </Button>
                     </div>
                 </div>
 
-                <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                    {!isActive && (
-                        <Button variant="ghost" size="icon" onClick={() => onStartTimer(task.id)} title="Start Timer" className="text-neon-400 hover:text-neon-300 hover:bg-neon-400/10">
-                            <Play className="w-4 h-4" />
-                        </Button>
-                    )}
-                    <Button variant="ghost" size="icon" onClick={() => onMoveToNextDay(task)} title="Move to Next Day">
-                        <Calendar className="w-4 h-4 text-blue-400" />
-                    </Button>
-                    <Button variant="ghost" size="icon" onClick={() => onDelete(task.id)} title="Delete">
-                        <Trash2 className="w-4 h-4 text-red-500" />
-                    </Button>
-                    <Button variant="primary" size="sm" onClick={() => onToggle(task.id)} className="ml-2">
-                        <CheckCircle className="w-4 h-4" /> Done
-                    </Button>
-                </div>
+                {/* Subtasks List */}
+                {task.subtasks && task.subtasks.length > 0 && (
+                    <div className="bg-black/20 border-t border-white/5 p-2 space-y-1">
+                        {task.subtasks.map((subtask, idx) => (
+                            <div
+                                key={subtask.id}
+                                className="flex items-center gap-3 px-3 py-2 hover:bg-white/5 rounded-lg transition-colors group/sub"
+                            >
+                                {/* Visual hierarchy line */}
+                                <div className="text-zinc-600">
+                                    <span className="text-xs">↳</span>
+                                </div>
+
+                                <button
+                                    onClick={() => onToggleSubtask(task.id, subtask.id)}
+                                    className="shrink-0 text-zinc-500 hover:text-[#FBFF00] transition-colors"
+                                >
+                                    {subtask.completed ? (
+                                        <CheckCircle2 size={16} className="text-[#FBFF00]" />
+                                    ) : (
+                                        <Circle size={16} />
+                                    )}
+                                </button>
+                                <span className={cn("text-xs flex-1", subtask.completed ? "text-zinc-500 line-through" : "text-zinc-300")}>
+                                    {subtask.title}
+                                </span>
+                            </div>
+                        ))}
+                    </div>
+                )}
             </Card>
         </div>
     );
 }
 
 export function Todo() {
-    const { tasks, addTask, updateTask, toggleTask, deleteTask, categories, startTimer, activeTimer, timerLogs } = useData();
-    const [newTaskTitle, setNewTaskTitle] = useState('');
-    const [newTaskCategory, setNewTaskCategory] = useState('General');
-    const [newTaskXP, setNewTaskXP] = useState(25);
-    const [newTaskNotes, setNewTaskNotes] = useState('');
-    const [newTaskPriority, setNewTaskPriority] = useState('Medium');
-    const [newTaskDueDate, setNewTaskDueDate] = useState('');
+    const { tasks, addTask, updateTask, toggleTask, toggleSubtask, deleteTask, categories, startTimer, activeTimer, timerLogs } = useData();
     const [filterCategory, setFilterCategory] = useState('All');
     const [sortBy, setSortBy] = useState('Priority'); // 'Priority' or 'Order'
     const [isAddingReminder, setIsAddingReminder] = useState(false);
+
+    // Feature States
+    const [isQuestModalOpen, setIsQuestModalOpen] = useState(false);
+    const [viewDate, setViewDate] = useState(new Date());
+    const [editingTask, setEditingTask] = useState(null);
 
     const sensors = useSensors(
         useSensor(PointerSensor),
         useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
     );
 
+    // --- Navigation Logic ---
+    const handleDateNav = (direction) => {
+        const newDate = new Date(viewDate);
+        newDate.setDate(viewDate.getDate() + direction);
+        setViewDate(newDate);
+    };
+
+    const getNavLabel = () => {
+        if (isSameDay(viewDate, new Date())) return 'Today';
+        if (isSameDay(viewDate, addDays(new Date(), 1))) return 'Tomorrow';
+        if (isSameDay(viewDate, addDays(new Date(), -1))) return 'Yesterday';
+        return format(viewDate, 'MMM d, yyyy');
+    };
+
     const activeTasks = tasks
         .filter(t => t.status !== 'completed')
         .filter(t => filterCategory === 'All' || t.category === filterCategory)
+        .filter(t => {
+            // Date Filtering Logic
+            if (!t.dueDate) return isSameDay(viewDate, new Date()); // No date -> Today
+
+            const taskDate = new Date(t.dueDate);
+            if (isSameDay(taskDate, viewDate)) return true;
+
+            // If viewing today, show overdue
+            if (isSameDay(viewDate, new Date()) && taskDate < new Date().setHours(0, 0, 0, 0)) return true;
+
+            return false;
+        })
         .sort((a, b) => {
             if (sortBy === 'Priority') {
                 const priorityOrder = { High: 3, Medium: 2, Low: 1 };
@@ -150,6 +224,13 @@ export function Todo() {
     const completedTasks = tasks
         .filter(t => t.status === 'completed')
         .filter(t => filterCategory === 'All' || t.category === filterCategory)
+        // Completed tasks: Show based on COMPLETED date, not due date?
+        // Usually simple todo lists show history in "Completed" section.
+        // Let's filter by completion date matching view date for cleaner daily view
+        .filter(t => {
+            if (!t.completedAt) return false;
+            return isSameDay(new Date(t.completedAt), viewDate);
+        })
         .sort((a, b) => new Date(b.completedAt) - new Date(a.completedAt));
 
     const getTaskDuration = (taskId) => {
@@ -178,56 +259,33 @@ export function Todo() {
         }
     };
 
-    const handlePriorityChange = (e) => {
-        const priority = e.target.value;
-        setNewTaskPriority(priority);
-
-        // Auto-set XP based on priority (User can still override)
-        const xpValues = {
-            'High': 35,
-            'Medium': 25,
-            'Low': 10
-        };
-        setNewTaskXP(xpValues[priority] || 25);
-    };
-
-    const handleAddTask = async (e) => {
-        e.preventDefault();
-        if (!newTaskTitle.trim()) return;
-
-        let finalDueDate = null;
-        if (newTaskDueDate) {
-            finalDueDate = newTaskDueDate;
-            const timeInput = document.getElementById('quest-time-input')?.value;
-            if (timeInput) {
-                finalDueDate = `${newTaskDueDate}T${timeInput}:00`;
-            } else {
-                // Default to T00:00:00 if strictly date, but for now standard YYYY-MM-DD logic holds
-                // If we want it to show on Calendar but "All Day", current logic filters T00:00:00
-                // If user picks date but no time -> T00:00 (All Day)
-            }
-        }
-
-        await addTask({
-            title: newTaskTitle,
-            category: newTaskCategory,
-            xpValue: parseInt(newTaskXP),
-            notes: newTaskNotes,
-            priority: newTaskPriority,
-            dueDate: finalDueDate,
-            order: activeTasks.length, // Append to end
-        });
-        setNewTaskTitle('');
-        setNewTaskNotes('');
-        setNewTaskXP(25);
-        setNewTaskPriority('Medium');
-        setNewTaskDueDate('');
-        if (document.getElementById('quest-time-input')) document.getElementById('quest-time-input').value = '';
-    };
-
     const handleMoveToNextDay = async (task) => {
-        alert("Task moved to next day (Visual only in MVP)");
+        const currentDue = task.dueDate ? new Date(task.dueDate) : new Date();
+        const nextDay = new Date(currentDue);
+        nextDay.setDate(nextDay.getDate() + 1);
+        await updateTask({ ...task, dueDate: nextDay.toISOString() });
     };
+
+    const handleSaveTask = async (taskData) => {
+        if (editingTask) {
+            await updateTask(taskData);
+        } else {
+            await addTask(taskData);
+        }
+        setIsQuestModalOpen(false);
+        setEditingTask(null);
+    };
+
+    const handleEditTask = (task) => {
+        setEditingTask(task);
+        setIsQuestModalOpen(true);
+    };
+
+    const openNewQuestModal = () => {
+        setEditingTask(null);
+        setIsQuestModalOpen(true);
+    }
+
 
     return (
         <div className="max-w-7xl mx-auto space-y-8">
@@ -258,153 +316,32 @@ export function Todo() {
                             <option key={cat.id} value={cat.name}>{cat.name}</option>
                         ))}
                     </Select>
-                    <div className="text-sm text-zinc-400">
-                        {activeTasks.length} active • {completedTasks.length} completed
-                    </div>
                 </div>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
                 {/* Left Column: Quests (60-65% width) -> col-span-8 */}
                 <div className="lg:col-span-8 space-y-6">
-                    {/* Add Quest Form */}
-                    <Card className="p-4">
-                        <form onSubmit={handleAddTask} className="space-y-4">
-                            {/* Title Section */}
-                            <div>
-                                <label className="block text-[10px] font-bold text-neon-400 uppercase tracking-wider mb-1.5">Quest Title</label>
-                                <Input
-                                    value={newTaskTitle}
-                                    onChange={e => setNewTaskTitle(e.target.value)}
-                                    placeholder="Enter quest name..."
-                                    className="bg-zinc-900/50 border-zinc-700/50 text-base py-2 h-10 ring-offset-0 focus:border-neon-400/50 focus:ring-1 focus:ring-neon-400/20 transition-all placeholder:text-zinc-600"
-                                    autoFocus
-                                />
-                            </div>
 
-                            {/* Metadata Grid */}
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                                <div>
-                                    <label className="block text-[10px] font-medium text-zinc-500 mb-1">Category</label>
-                                    <Select
-                                        value={newTaskCategory}
-                                        onChange={e => setNewTaskCategory(e.target.value)}
-                                        className="bg-zinc-900/50 border-zinc-700/50 focus:border-neon-400/50 h-10 py-2 text-sm"
-                                    >
-                                        <option>General</option>
-                                        <option>Work</option>
-                                        <option>Personal</option>
-                                        <option>Urgent</option>
-                                        {categories.map(cat => (
-                                            <option key={cat.id} value={cat.name}>{cat.name}</option>
-                                        ))}
-                                    </Select>
-                                </div>
+                    {/* Navigation & Add Bar */}
+                    <Card className="p-4 bg-zinc-900/80 border-zinc-800 flex justify-between items-center sticky top-20 z-30 backdrop-blur-md">
+                        <div className="flex items-center gap-3">
+                            <Button size="icon" variant="ghost" className="h-8 w-8 text-zinc-400 hover:text-white" onClick={() => handleDateNav(-1)}>
+                                <ChevronLeft className="w-5 h-5" />
+                            </Button>
+                            <span className="text-lg font-bold text-white uppercase tracking-wider min-w-[120px] text-center">{getNavLabel()}</span>
+                            <Button size="icon" variant="ghost" className="h-8 w-8 text-zinc-400 hover:text-white" onClick={() => handleDateNav(1)}>
+                                <ChevronRight className="w-5 h-5" />
+                            </Button>
+                        </div>
 
-                                <div>
-                                    <label className="block text-[10px] font-medium text-zinc-500 mb-1">Priority</label>
-                                    <Select
-                                        value={newTaskPriority}
-                                        onChange={handlePriorityChange}
-                                        className="bg-zinc-900/50 border-zinc-700/50 focus:border-neon-400/50 h-10 py-2 text-sm"
-                                    >
-                                        <option value="High">High</option>
-                                        <option value="Medium">Medium</option>
-                                        <option value="Low">Low</option>
-                                    </Select>
-                                </div>
-
-                                <div>
-                                    <label className="block text-[10px] font-medium text-zinc-500 mb-1">XP Reward</label>
-                                    <div className="relative">
-                                        <div className="absolute left-3 top-1/2 -translate-y-1/2 text-neon-400 font-bold text-[10px]">XP</div>
-                                        <Input
-                                            type="number"
-                                            value={newTaskXP}
-                                            onChange={e => setNewTaskXP(e.target.value)}
-                                            className="bg-zinc-900/50 border-zinc-700/50 pl-9 h-10 py-2 text-sm focus:border-neon-400/50"
-                                        />
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* Detail Row: Due Date & Notes */}
-                            <div className="flex flex-col gap-4">
-                                {/* Enhanced Due Date */}
-                                <div className="space-y-1">
-                                    <label className="block text-[10px] font-medium text-zinc-500">Due Date</label>
-                                    <div className="flex gap-2">
-
-                                        {/* Quick Buttons */}
-                                        <button
-                                            type="button"
-                                            onClick={() => {
-                                                const d = new Date();
-                                                setNewTaskDueDate(d.toISOString().split('T')[0]);
-                                            }}
-                                            className="px-2.5 py-1.5 bg-zinc-800 hover:bg-zinc-700 rounded-md text-[10px] font-medium text-zinc-300 transition-colors border border-zinc-700 hover:border-zinc-600"
-                                        >
-                                            Today
-                                        </button>
-                                        <button
-                                            type="button"
-                                            onClick={() => {
-                                                const d = new Date();
-                                                d.setDate(d.getDate() + 1);
-                                                setNewTaskDueDate(d.toISOString().split('T')[0]);
-                                            }}
-                                            className="px-2.5 py-1.5 bg-zinc-800 hover:bg-zinc-700 rounded-md text-[10px] font-medium text-zinc-300 transition-colors border border-zinc-700 hover:border-zinc-600"
-                                        >
-                                            Tmrw
-                                        </button>
-
-                                        {/* Date Input */}
-                                        <div className="relative flex-1">
-                                            <Calendar className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-500 pointer-events-none" />
-                                            <Input
-                                                type="date"
-                                                value={newTaskDueDate}
-                                                onChange={e => setNewTaskDueDate(e.target.value)}
-                                                className="bg-zinc-900/50 border-zinc-700/50 pl-8 h-9 text-xs text-zinc-300 [&::-webkit-calendar-picker-indicator]:opacity-0 [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:w-full [&::-webkit-calendar-picker-indicator]:h-full [&::-webkit-calendar-picker-indicator]:cursor-pointer"
-                                            />
-                                        </div>
-
-                                        {/* Time Input */}
-                                        <div className="relative w-24">
-                                            <Clock className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-500 pointer-events-none" />
-                                            <Input
-                                                type="time"
-                                                id="quest-time-input"
-                                                className="bg-zinc-900/50 border-zinc-700/50 pl-8 h-9 text-xs text-zinc-300 [&::-webkit-calendar-picker-indicator]:invert"
-                                            />
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* Notes */}
-                                <div className="space-y-1">
-                                    <label className="block text-[10px] font-medium text-zinc-500">Notes (Optional)</label>
-                                    <Input
-                                        value={newTaskNotes}
-                                        onChange={e => setNewTaskNotes(e.target.value)}
-                                        placeholder="Add details..."
-                                        className="bg-zinc-900/50 border-zinc-700/50 h-9 text-xs focus:border-neon-400/50"
-                                    />
-                                </div>
-                            </div>
-
-                            {/* Submit Action */}
-                            <div className="pt-2">
-                                <Button
-                                    type="submit"
-                                    disabled={!newTaskTitle.trim()}
-                                    className="w-full h-10 text-black font-bold text-sm bg-gradient-to-r from-neon-400 to-neon-500 hover:from-neon-300 hover:to-neon-400 transition-all shadow-[0_0_15px_rgba(251,255,0,0.15)] hover:shadow-[0_0_20px_rgba(251,255,0,0.3)] disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none"
-                                >
-                                    <Plus className="w-4 h-4 mr-2" />
-                                    Create Quest
-                                </Button>
-                            </div>
-                        </form>
+                        <Button
+                            className="bg-[#FBFF00] hover:bg-[#e1e600] text-black font-bold flex items-center gap-2 shadow-[0_0_15px_rgba(251,255,0,0.2)]"
+                            onClick={openNewQuestModal}
+                        >
+                            <Plus className="w-4 h-4" />
+                            Add Quest
+                        </Button>
                     </Card>
 
                     {/* Quest List */}
@@ -421,15 +358,19 @@ export function Todo() {
                                         task={task}
                                         onToggle={toggleTask}
                                         onDelete={deleteTask}
+                                        onEdit={handleEditTask}
                                         onMoveToNextDay={handleMoveToNextDay}
                                         onStartTimer={startTimer}
                                         activeTimer={activeTimer}
                                         totalDuration={getTaskDuration(task.id)}
+                                        onToggleSubtask={toggleSubtask}
                                     />
                                 ))}
                                 {activeTasks.length === 0 && (
-                                    <div className="text-center py-10 text-zinc-500">
-                                        {filterCategory === 'All' ? "No active quests. Enjoy your day!" : `No active quests in ${filterCategory}.`}
+                                    <div className="text-center py-20 flex flex-col items-center gap-4 text-zinc-500">
+                                        <Trophy className="w-12 h-12 opacity-50" />
+                                        <p>No active quests for {getNavLabel()}.</p>
+                                        <Button variant="outline" onClick={openNewQuestModal}>Create One</Button>
                                     </div>
                                 )}
                             </div>
@@ -439,7 +380,7 @@ export function Todo() {
                     {/* Completed Tasks */}
                     {completedTasks.length > 0 && (
                         <div className="pt-8 border-t border-zinc-800">
-                            <h3 className="text-lg font-bold text-zinc-400 mb-4">Completed Today</h3>
+                            <h3 className="text-lg font-bold text-zinc-400 mb-4">Completed on {getNavLabel()}</h3>
                             <div className="space-y-2 opacity-60">
                                 {completedTasks.map(task => (
                                     <div key={task.id} className="flex items-center justify-between p-3 bg-zinc-900/30 rounded-lg border border-zinc-800/50 group">
@@ -486,6 +427,20 @@ export function Todo() {
                     </div>
                 </div>
             </div>
+
+            {/* Quest Modal for Add/Edit */}
+            <QuestModal
+                isOpen={isQuestModalOpen}
+                onClose={() => {
+                    setIsQuestModalOpen(false);
+                    setEditingTask(null);
+                }}
+                onSave={handleSaveTask}
+                onDelete={deleteTask}
+                initialData={editingTask}
+                selectedDate={viewDate.toISOString()}
+                availableCategories={categories?.map(c => c.name) || []}
+            />
         </div>
     );
 }

@@ -2,6 +2,7 @@ import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { UserProvider } from './contexts/UserContext';
 import { DataProvider } from './contexts/DataContext';
+import { AuthProvider } from './contexts/AuthContext';
 import { Layout } from './components/layout/Layout';
 import { Dashboard } from './features/dashboard/Dashboard';
 import { Goals } from './features/goals/Goals';
@@ -10,31 +11,38 @@ import { Todo } from './features/todo/Todo';
 import { Sleep } from './features/sleep/Sleep';
 import { Journal } from './features/journal/Journal';
 import { Calendar } from './features/calendar/Calendar';
+import { Rewards } from './features/rewards/Rewards';
 import { Settings } from './features/settings/Settings';
 
 import { ToastProvider } from './contexts/ToastContext';
+
+import { OnboardingModal } from './components/onboarding/OnboardingModal';
 
 function App() {
     return (
         <BrowserRouter>
             <ToastProvider>
-                <UserProvider>
-                    <DataProvider>
-                        <Routes>
-                            <Route path="/" element={<Layout />}>
-                                <Route index element={<Dashboard />} />
-                                <Route path="goals" element={<Goals />} />
-                                <Route path="habits" element={<Habits />} />
-                                <Route path="todo" element={<Todo />} />
-                                <Route path="sleep" element={<Sleep />} />
-                                <Route path="journal" element={<Journal />} />
-                                <Route path="calendar" element={<Calendar />} />
-                                <Route path="settings" element={<Settings />} />
-                                <Route path="*" element={<Navigate to="/" replace />} />
-                            </Route>
-                        </Routes>
-                    </DataProvider>
-                </UserProvider>
+                <AuthProvider>
+                    <UserProvider>
+                        <DataProvider>
+                            <OnboardingModal />
+                            <Routes>
+                                <Route path="/" element={<Layout />}>
+                                    <Route index element={<Dashboard />} />
+                                    <Route path="goals" element={<Goals />} />
+                                    <Route path="habits" element={<Habits />} />
+                                    <Route path="todo" element={<Todo />} />
+                                    <Route path="sleep" element={<Sleep />} />
+                                    <Route path="journal" element={<Journal />} />
+                                    <Route path="calendar" element={<Calendar />} />
+                                    <Route path="rewards" element={<Rewards />} />
+                                    <Route path="settings" element={<Settings />} />
+                                    <Route path="*" element={<Navigate to="/" replace />} />
+                                </Route>
+                            </Routes>
+                        </DataProvider>
+                    </UserProvider>
+                </AuthProvider>
             </ToastProvider>
         </BrowserRouter>
     );

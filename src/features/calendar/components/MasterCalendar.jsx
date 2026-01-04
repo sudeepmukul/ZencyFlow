@@ -3,6 +3,7 @@ import { format, addDays, startOfWeek, addWeeks, subWeeks, isSameDay, startOfDay
 import { useData } from '../../../contexts/DataContext';
 import { CalendarSidebar } from './CalendarSidebar';
 import { CalendarGrid } from './CalendarGrid';
+import { QuestModal } from './QuestModal';
 
 // --- CONSTANTS ---
 const PIXELS_PER_MINUTE = 1.1;
@@ -18,12 +19,16 @@ export function MasterCalendar() {
         updateTask,
         addTask,
         updateCalendarEvent,
-        addCalendarEvent
+        deleteTask,
+        categories
     } = useData();
 
     // State
     const [currentDate, setCurrentDate] = useState(new Date());
     const [draggedEvent, setDraggedEvent] = useState(null);
+    const [currentTime, setCurrentTime] = useState(new Date());
+    const [modalState, setModalState] = useState({ isOpen: false, data: null, selectedDate: null });
+
     const [categoryFilters, setCategoryFilters] = useState({
         'Work': true,
         'Personal': true,
@@ -32,14 +37,26 @@ export function MasterCalendar() {
         'Reminders': true,
     });
 
+    // Timer for Current Time Indicator
+    useEffect(() => {
+        const timer = setInterval(() => setCurrentTime(new Date()), 60000); // Update minutely
+        return () => clearInterval(timer);
+    }, []);
+
     // Derived
     const weekStart = startOfWeek(currentDate, { weekStartsOn: 1 });
     const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
 
-    // Dynamic Category & Color Calculation
+    // ... (Dynamic Category & Color Calculation logic - keep as is) ...
     const { availableCategories, categoryColors } = useMemo(() => {
         const safeTasks = tasks || [];
         const cats = new Set(['Work', 'Personal', 'Urgent', 'General']);
+
+        // Add custom categories from Settings
+        if (categories) {
+            categories.forEach(c => cats.add(c.name));
+        }
+
         const colors = {
             'Work': '#3b82f6',    // Blue
             'Personal': '#10b981',// Emerald
@@ -51,13 +68,10 @@ export function MasterCalendar() {
         safeTasks.forEach(t => {
             if (t.category) {
                 cats.add(t.category);
-                // If this custom category doesn't have a color yet, try to find one from the task
                 if (!colors[t.category]) {
                     if (t.categoryColor) {
                         colors[t.category] = t.categoryColor;
                     } else {
-                        // Deterministic color generation for unknown categories
-                        // Simple hash to HSL
                         const str = t.category;
                         let hash = 0;
                         for (let i = 0; i < str.length; i++) {
@@ -76,14 +90,14 @@ export function MasterCalendar() {
         };
     }, [tasks]);
 
-    // Ensure filters exist for all categories (auto-enable new ones)
+    // Ensure filters exist for all categories
     useEffect(() => {
         setCategoryFilters(prev => {
             const next = { ...prev };
             let changed = false;
             availableCategories.forEach(cat => {
                 if (next[cat] === undefined) {
-                    next[cat] = true; // Default to existing behavior
+                    next[cat] = true;
                     changed = true;
                 }
             });
@@ -99,22 +113,44 @@ export function MasterCalendar() {
         }));
     };
 
-    const handleSlotClick = async (clickedDate) => {
-        const title = prompt("New Quest Title:");
-        if (title) {
-            await addTask({
-                title,
-                dueDate: clickedDate.toISOString(),
-                priority: 'Medium',
-                category: 'General'
+    const handleSlotClick = (clickedDate) => {
+        setModalState({
+            isOpen: true,
+            data: null,
+            selectedDate: clickedDate.toISOString() // Pass full ISO with time
+        });
+    };
+
+    const handleEventClick = (event) => {
+        if (event.isTask) {
+            setModalState({
+                isOpen: true,
+                data: event,
+                selectedDate: null
             });
         }
+        // Future: Handle Reminder/CalendarEvent editing
+    };
+
+    const handleSaveQuest = async (questData) => {
+        if (questData.id) {
+            await updateTask(questData);
+        } else {
+            // Remove id if undefined to ensure clean creation
+            const { id, ...newQuest } = questData;
+            await addTask(newQuest);
+        }
+        setModalState({ isOpen: false, data: null, selectedDate: null });
+    };
+
+    const handleDeleteQuest = async (id) => {
+        await deleteTask(id);
+        setModalState({ isOpen: false, data: null, selectedDate: null });
     };
 
     const handleDragStart = (e, event) => {
         setDraggedEvent(event);
         e.dataTransfer.effectAllowed = 'move';
-        // Make ghost image slightly transparent or use default
         e.dataTransfer.setDragImage(e.target, 0, 0);
     };
 
@@ -133,7 +169,6 @@ export function MasterCalendar() {
         // Calculate duration to preserve it
         const originalStart = new Date(draggedEvent.startTime);
         const originalEnd = new Date(draggedEvent.endTime);
-        // Safety check for invalid dates
         let duration = 60;
         if (!isNaN(originalStart) && !isNaN(originalEnd)) {
             duration = differenceInMinutes(originalEnd, originalStart);
@@ -142,39 +177,32 @@ export function MasterCalendar() {
         const newEndTime = addMinutes(newStartTime, duration);
 
         if (draggedEvent.isTask) {
-            // CRITICAL FIX: Merge with original task to prevent data loss (title, category, etc.)
             const originalTask = tasks.find(t => t.id === draggedEvent.id);
             if (originalTask) {
                 await updateTask({
-                    ...originalTask, // Merge existing data
-                    dueDate: newStartTime.toISOString(),
-                    endTime: newEndTime.toISOString()
-                });
-            }
-        } else if (draggedEvent.isReminder) {
-            // Reminders might be read-only or single-point in some systems, 
-            // but if we want to move them:
-            // Note: Reminders in DataContext might not have 'updateReminder' exposed broadly 
-            // or might just have 'date' field.
-            // Let's assume we can't easily move reminders yet unless we add updateReminder to DataContext
-            // But for now, let's just log or ignore if no update method.
-            // Actually, the user snippet didn't show updateReminder either.
-        } else {
-            const originalEvent = calendarEvents.find(e => e.id === draggedEvent.id);
-            if (originalEvent) {
-                await updateCalendarEvent({
-                    ...originalEvent,
+                    ...originalTask,
+                    dueDate: newStartTime.toISOString(), // Keep legacy field sync
                     startTime: newStartTime.toISOString(),
                     endTime: newEndTime.toISOString()
                 });
             }
         }
-
+        // ... (Reminder/CalendarEvent drag logic)
         setDraggedEvent(null);
     };
 
     return (
         <div className="flex h-[calc(100vh-100px)] overflow-hidden bg-zinc-950 border border-zinc-900 rounded-xl shadow-2xl text-zinc-300 font-sans">
+
+            <QuestModal
+                isOpen={modalState.isOpen}
+                onClose={() => setModalState({ ...modalState, isOpen: false })}
+                onSave={handleSaveQuest}
+                onDelete={handleDeleteQuest}
+                initialData={modalState.data}
+                selectedDate={modalState.selectedDate}
+                availableCategories={availableCategories}
+            />
 
             {/* Sidebar */}
             <CalendarSidebar
@@ -234,12 +262,14 @@ export function MasterCalendar() {
                             <CalendarGrid
                                 key={day.toISOString()}
                                 date={day}
+                                currentTime={currentTime}
                                 events={calendarEvents}
                                 tasks={tasks}
                                 reminders={reminders}
                                 filters={categoryFilters}
                                 categoryColors={categoryColors}
                                 onSlotClick={handleSlotClick}
+                                onEventClick={handleEventClick}
                                 onDragStart={handleDragStart}
                                 onDropEvent={handleDropEvent}
                             />

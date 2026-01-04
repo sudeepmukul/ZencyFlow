@@ -173,13 +173,15 @@ export function Journal() {
                     </div>
 
                     <div className="grid grid-cols-2 gap-4">
-                        <div>
-                            <label className="block text-sm font-medium text-zinc-400 mb-1">Date</label>
+                        <div onClick={() => document.getElementById('journal-date-input').showPicker()} className="cursor-pointer">
+                            <label className="block text-sm font-medium text-zinc-400 mb-1 pointer-events-none">Date</label>
                             <Input
+                                id="journal-date-input"
                                 type="date"
                                 required
                                 value={formData.date}
                                 onChange={e => setFormData({ ...formData, date: e.target.value })}
+                                className="cursor-pointer [&::-webkit-calendar-picker-indicator]:hidden"
                             />
                         </div>
                         <div>

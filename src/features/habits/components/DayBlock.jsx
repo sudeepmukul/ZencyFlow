@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Check } from 'lucide-react';
 
-export const DayBlock = ({ day, isCompleted, onClick, disabled }) => {
+export const DayBlock = ({ day, isCompleted, onClick, disabled, isToday }) => {
     const [isAnimating, setIsAnimating] = useState(false);
 
     const handleClick = () => {
@@ -13,7 +13,7 @@ export const DayBlock = ({ day, isCompleted, onClick, disabled }) => {
 
     return (
         <div className="flex flex-col items-center gap-2">
-            <span className="text-[10px] font-medium text-gray-500 uppercase tracking-wider">
+            <span className={`text-[10px] font-medium uppercase tracking-wider ${isToday ? 'text-[#FBFF00] font-bold' : 'text-gray-500'}`}>
                 {day}
             </span>
             <button
@@ -23,7 +23,9 @@ export const DayBlock = ({ day, isCompleted, onClick, disabled }) => {
           group relative flex h-12 w-12 items-center justify-center rounded-xl border-2 transition-all duration-300 ease-out
           ${isCompleted
                         ? 'border-[#FBFF00] bg-[#FBFF00] text-black shadow-[0_0_20px_rgba(251,255,0,0.4)]'
-                        : 'border-white/10 bg-white/5 hover:border-[#FBFF00]/50 hover:bg-white/10'
+                        : isToday
+                            ? 'border-[#FBFF00] bg-[#FBFF00]/10 text-white shadow-[0_0_15px_rgba(251,255,0,0.2)]'
+                            : 'border-white/10 bg-white/5 hover:border-[#FBFF00]/50 hover:bg-white/10'
                     }
           ${isAnimating ? 'scale-90' : 'scale-100 hover:scale-105'}
         `}

@@ -66,14 +66,18 @@ export const HabitCard = ({ habit, onToggle, onEdit, onDelete }) => {
             </div>
 
             <div className="relative z-10 mb-6 flex justify-between gap-2">
-                {['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'].map((day, index) => (
-                    <DayBlock
-                        key={day}
-                        day={day}
-                        isCompleted={habit.weekStatus[index]}
-                        onClick={() => onToggle(habit.id, index)}
-                    />
-                ))}
+                {['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'].map((day, index) => {
+                    const currentDayIndex = (new Date().getDay() + 6) % 7;
+                    return (
+                        <DayBlock
+                            key={day}
+                            day={day}
+                            isCompleted={habit.weekStatus[index]}
+                            isToday={index === currentDayIndex}
+                            onClick={() => onToggle(habit.id, index)}
+                        />
+                    );
+                })}
             </div>
 
             <div className="relative z-10 mb-4 h-1.5 w-full overflow-hidden rounded-full bg-white/5">

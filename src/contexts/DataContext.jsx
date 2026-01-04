@@ -1,5 +1,8 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { db } from '../lib/db';
+import { db as firestore } from '../lib/firebase';
+import { doc, setDoc, deleteDoc, collection, getDocs, writeBatch } from 'firebase/firestore';
+import { useAuth } from './AuthContext';
 import { useUser } from './UserContext';
 
 // Track stopped timer IDs to prevent duplicate stops
@@ -9,6 +12,7 @@ const DataContext = createContext();
 
 export const DataProvider = ({ children }) => {
     const { user, addXP, updateProfile, checkAchievements } = useUser();
+    const { currentUser } = useAuth();
     const [goals, setGoals] = useState([]);
     const [habits, setHabits] = useState([]);
     const [tasks, setTasks] = useState([]);
@@ -20,6 +24,8 @@ export const DataProvider = ({ children }) => {
     const [categories, setCategories] = useState([]);
     const [calendarEvents, setCalendarEvents] = useState([]);
     const [calendarLayers, setCalendarLayers] = useState([]);
+    const [rewards, setRewards] = useState([]);
+    const [rewardHistory, setRewardHistory] = useState([]);
 
     const refreshData = useCallback(async () => {
         try {
@@ -44,7 +50,9 @@ export const DataProvider = ({ children }) => {
                 db.getAll('reminders'),
                 db.getAll('categories'),
                 db.getAll('calendar_events'),
-                db.getAll('calendar_layers')
+                db.getAll('calendar_layers'),
+                db.getAll('rewards'),
+                db.getAll('reward_history')
             ]);
 
             const fourDaysAgo = new Date();
@@ -60,7 +68,53 @@ export const DataProvider = ({ children }) => {
                 await db.delete('tasks', task.id);
             }
 
-            const activeTasks = (fetchedTasks || []).filter(task =>
+            // DAILY QUEST RESET LOGIC
+            // Find all 'daily' tasks that are COMPLETED
+            const completedDailyTasks = (fetchedTasks || []).filter(task =>
+                task.status === 'completed' &&
+                task.repeat === 'daily'
+            );
+
+            const todayStr = new Date().toISOString().split('T')[0];
+
+            for (const dailyTask of completedDailyTasks) {
+                if (!dailyTask.completedAt) continue;
+
+                const completionDate = new Date(dailyTask.completedAt).toISOString().split('T')[0];
+
+                // If completed on a PREVIOUS day (not today)
+                if (completionDate < todayStr) {
+                    // Check if we ALREADY generated a new one for today to avoid duplicates
+                    // We look for a PENDING task with the SAME title and 'daily' flag
+                    const alreadyReset = (fetchedTasks || []).some(t =>
+                        t.title === dailyTask.title &&
+                        t.repeat === 'daily' &&
+                        t.status !== 'completed'
+                    );
+
+                    if (!alreadyReset) {
+                        console.log(`[Daily Reset] Regenerating task: ${dailyTask.title}`);
+                        const newTask = {
+                            ...dailyTask,
+                            id: undefined, // Let DB assign new ID
+                            status: 'pending',
+                            completedAt: null,
+                            createdAt: new Date(),
+                            originalId: dailyTask.id // Optional: track lineage
+                        };
+                        // Remove 'id' properly if spreading didn't do it (it does for undefined, but safer to delete)
+                        delete newTask.id;
+
+                        await db.add('tasks', newTask);
+                    }
+                }
+            }
+            // End Daily Quest Logic
+
+            // Re-fetch tasks to include any newly generated ones
+            const refreshedTasks = await db.getAll('tasks');
+
+            const activeTasks = (refreshedTasks || []).filter(task =>
                 !(task.status === 'completed' && task.completedAt && new Date(task.completedAt) < fourDaysAgo)
             );
 
@@ -89,6 +143,23 @@ export const DataProvider = ({ children }) => {
                 setCalendarLayers(fetchedCalendarLayers);
             }
 
+            if (!fetchedCalendarLayers || fetchedCalendarLayers.length === 0) {
+                const defaultLayers = [
+                    { id: 'tasks', name: 'Tasks', color: '#a855f7', enabled: true, type: 'system' }, // Purple
+                    { id: 'work', name: 'Work', color: '#3b82f6', enabled: true, type: 'custom' }, // Blue
+                    { id: 'personal', name: 'Personal', color: '#22c55e', enabled: true, type: 'custom' } // Green
+                ];
+                // We don't save them here to avoid async complexity in the loops, 
+                // but we set state. They will be saved when user toggles/edits.
+                // Actually better to save if empty so we have persistence.
+                setCalendarLayers(defaultLayers);
+            } else {
+                setCalendarLayers(fetchedCalendarLayers);
+            }
+
+            setRewards(await db.getAll('rewards') || []);
+            setRewardHistory(await db.getAll('reward_history') || []);
+
             const fetchedTimerLogs = await db.getAll('timer_logs');
             setTimerLogs(fetchedTimerLogs || []);
         } catch (error) {
@@ -100,33 +171,190 @@ export const DataProvider = ({ children }) => {
         refreshData();
     }, [refreshData]);
 
+    // --- CLOUD SYNC LOGIC ---
+
+    const syncItem = async (collectionName, item, isDelete = false) => {
+        if (!currentUser) return; // Only sync if logged in
+
+        try {
+            const userDocRef = doc(firestore, 'users', currentUser.uid, collectionName, item.id.toString());
+            if (isDelete) {
+                await deleteDoc(userDocRef);
+            } else {
+                // Ensure we save ISO strings for dates to avoid serializaton issues if they are Date objects
+                // (Most of our app uses strings, but safety first)
+                await setDoc(userDocRef, item, { merge: true });
+            }
+        } catch (error) {
+            console.error(`[Sync] Failed to sync ${collectionName} ${item.id}:`, error);
+        }
+    };
+
+    // Pull from cloud on login
+    useEffect(() => {
+        if (!currentUser) return;
+
+        const pullFromCloud = async () => {
+            console.log('[Sync] Pulling from Cloud for user:', currentUser.uid);
+            try {
+                const collectionsToSync = [
+                    'goals', 'habits', 'tasks', 'reminders', 'categories', 'rewards', 'reward_history',
+                    'sleep_logs', 'journal_entries', 'habit_logs', 'timer_logs', 'calendar_events', 'calendar_layers'
+                ];
+
+                for (const colName of collectionsToSync) {
+                    const querySnapshot = await getDocs(collection(firestore, 'users', currentUser.uid, colName));
+                    const cloudItems = [];
+                    querySnapshot.forEach((doc) => {
+                        cloudItems.push(doc.data());
+                    });
+
+                    if (cloudItems.length === 0) continue;
+
+                    // Merge logic: Last Write Wins based on updatedAt
+                    const localItems = await db.getAll(colName);
+
+                    for (const cloudItem of cloudItems) {
+                        // Sleep logs use 'date' as ID, others use 'id'
+                        const itemKey = colName === 'sleep_logs' ? cloudItem.date : cloudItem.id;
+                        const localItem = localItems.find(i => {
+                            if (colName === 'sleep_logs') {
+                                return i.date === cloudItem.date;
+                            }
+                            return i.id === cloudItem.id;
+                        });
+
+                        let shouldUpdate = false;
+                        if (!localItem) {
+                            shouldUpdate = true;
+                        } else {
+                            const cloudTime = new Date(cloudItem.updatedAt || cloudItem.createdAt || 0).getTime();
+                            const localTime = new Date(localItem.updatedAt || localItem.createdAt || 0).getTime();
+                            if (cloudTime > localTime) {
+                                shouldUpdate = true;
+                            }
+                        }
+
+                        if (shouldUpdate) {
+                            await db.put(colName, cloudItem);
+                        }
+                    }
+                }
+                await refreshData();
+                console.log('[Sync] Pull complete');
+            } catch (error) {
+                console.error('[Sync] Pull failed:', error);
+            }
+        };
+
+        pullFromCloud();
+    }, [currentUser, refreshData]);
+
+    // Force push all local data to cloud (for initial sync or recovery)
+    const pushAllToCloud = async () => {
+        if (!currentUser) {
+            console.log('[Sync] Cannot push: Not logged in');
+            return false;
+        }
+
+        console.log('[Sync] Pushing all local data to cloud...');
+        try {
+            const collectionsToSync = [
+                'goals', 'habits', 'tasks', 'reminders', 'categories', 'rewards', 'reward_history',
+                'sleep_logs', 'journal_entries', 'habit_logs', 'timer_logs', 'calendar_events', 'calendar_layers'
+            ];
+
+            for (const colName of collectionsToSync) {
+                const localItems = await db.getAll(colName);
+                for (const item of localItems) {
+                    // Ensure item has updatedAt for sync comparison
+                    const itemWithTimestamp = {
+                        ...item,
+                        updatedAt: item.updatedAt || new Date().toISOString()
+                    };
+
+                    // Handle sleep_logs which use 'date' as ID
+                    const itemId = colName === 'sleep_logs' ? item.date : item.id;
+                    if (!itemId) continue; // Skip items without proper ID
+
+                    const userDocRef = doc(firestore, 'users', currentUser.uid, colName, itemId.toString());
+                    await setDoc(userDocRef, itemWithTimestamp, { merge: true });
+                }
+                console.log(`[Sync] Pushed ${localItems.length} items from ${colName}`);
+            }
+
+            console.log('[Sync] Push complete!');
+            return true;
+        } catch (error) {
+            console.error('[Sync] Push failed:', error);
+            return false;
+        }
+    };
+
+
+    // --- CRUD WRAPPERS ---
+
     const addCategory = async (name) => {
-        await db.add('categories', { name, createdAt: new Date() });
+        const newCategory = {
+            id: crypto.randomUUID(),
+            name,
+            createdAt: new Date(),
+            updatedAt: new Date().toISOString()
+        };
+        await db.add('categories', newCategory);
+        await syncItem('categories', newCategory);
         await refreshData();
     };
 
     const deleteCategory = async (id) => {
         await db.delete('categories', id);
+        await syncItem('categories', { id }, true);
+        await refreshData();
+    };
+
+    const updateCategory = async (category) => {
+        const updated = { ...category, updatedAt: new Date().toISOString() };
+        await db.put('categories', updated);
+        await syncItem('categories', updated);
         await refreshData();
     };
 
     const addGoal = async (goal) => {
-        await db.add('goals', { ...goal, createdAt: new Date() });
+        const newGoal = {
+            ...goal,
+            id: crypto.randomUUID(),
+            createdAt: new Date(),
+            updatedAt: new Date().toISOString()
+        };
+        await db.add('goals', newGoal);
+        await syncItem('goals', newGoal);
         await refreshData();
     };
 
     const updateGoal = async (goal) => {
-        await db.put('goals', goal);
+        const updatedGoal = { ...goal, updatedAt: new Date().toISOString() };
+        await db.put('goals', updatedGoal);
+        await syncItem('goals', updatedGoal);
         await refreshData();
     };
 
     const deleteGoal = async (id) => {
         await db.delete('goals', id);
+        await syncItem('goals', { id }, true);
         await refreshData();
     };
 
     const addHabit = async (habit) => {
-        await db.add('habits', { ...habit, streak: 0, longestStreak: 0, createdAt: new Date() });
+        const newHabit = {
+            ...habit,
+            id: crypto.randomUUID(), // Force UUID
+            streak: 0,
+            longestStreak: 0,
+            createdAt: new Date(),
+            updatedAt: new Date().toISOString()
+        };
+        await db.add('habits', newHabit);
+        await syncItem('habits', newHabit);
         await refreshData();
     };
 
@@ -137,13 +365,25 @@ export const DataProvider = ({ children }) => {
 
         if (existing) {
             await db.delete('habit_logs', existing.id);
+            // We need to delete from cloud too. But habit_logs usually generic auto-inc ID.
+            // We should ideally use UUIDs for logs too if we want to sync them perfectly.
+            // For now, let's just create 'id' if missing when adding.
+            if (existing.id) await syncItem('habit_logs', existing, true);
             await addXP(-habitXP);
         } else {
-            await db.add('habit_logs', { habitId, date });
+            const newLog = {
+                id: crypto.randomUUID(),
+                habitId,
+                date,
+                updatedAt: new Date().toISOString()
+            };
+            await db.add('habit_logs', newLog);
+            await syncItem('habit_logs', newLog);
             await addXP(habitXP);
         }
 
         const updatedLogs = await db.getAll('habit_logs');
+        // ... (Recalculate Streaks - existing logic) ...
         const thisHabitLogs = updatedLogs.filter(l => l.habitId === habitId);
         const sortedDates = thisHabitLogs.map(l => l.date).sort((a, b) => new Date(b) - new Date(a));
 
@@ -174,11 +414,14 @@ export const DataProvider = ({ children }) => {
 
         const habit = habits.find(h => h.id === habitId);
         if (habit) {
-            await db.put('habits', {
+            const updatedHabit = {
                 ...habit,
                 streak: streak,
-                longestStreak: Math.max(habit.longestStreak || 0, streak)
-            });
+                longestStreak: Math.max(habit.longestStreak || 0, streak),
+                updatedAt: new Date().toISOString()
+            };
+            await db.put('habits', updatedHabit);
+            await syncItem('habits', updatedHabit);
         }
 
         await refreshData();
@@ -186,25 +429,36 @@ export const DataProvider = ({ children }) => {
     };
 
     const updateHabit = async (habit) => {
-        await db.put('habits', habit);
+        const updatedHabit = { ...habit, updatedAt: new Date().toISOString() };
+        await db.put('habits', updatedHabit);
+        await syncItem('habits', updatedHabit);
         await refreshData();
     };
 
     const deleteHabit = async (id) => {
         await db.delete('habits', id);
+        await syncItem('habits', { id }, true);
         await refreshData();
     };
 
     const addTask = async (task) => {
-        const newTask = { ...task, status: 'pending', createdAt: new Date() };
+        const newTask = {
+            ...task,
+            id: crypto.randomUUID(),
+            status: 'pending',
+            createdAt: new Date(),
+            updatedAt: new Date().toISOString()
+        };
         await db.add('tasks', newTask);
+        await syncItem('tasks', newTask);
         await refreshData();
-        // Optimistic check for immediate feedback (Planner, Prioritizer)
         await checkAchievements([...tasks, newTask], habits);
     };
 
     const updateTask = async (task) => {
-        await db.put('tasks', task);
+        const updatedTask = { ...task, updatedAt: new Date().toISOString() };
+        await db.put('tasks', updatedTask);
+        await syncItem('tasks', updatedTask);
         await refreshData();
     };
 
@@ -213,10 +467,12 @@ export const DataProvider = ({ children }) => {
         if (!task) return;
 
         const updatedTask = task.status === 'completed'
-            ? { ...task, status: 'pending', completedAt: null }
-            : { ...task, status: 'completed', completedAt: new Date().toISOString() };
+            ? { ...task, status: 'pending', completedAt: null, updatedAt: new Date().toISOString() }
+            : { ...task, status: 'completed', completedAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
 
         await db.put('tasks', updatedTask);
+        await syncItem('tasks', updatedTask);
+
         if (updatedTask.status === 'completed') {
             await addXP(task.xpValue || 20);
         } else {
@@ -225,7 +481,6 @@ export const DataProvider = ({ children }) => {
 
         await refreshData();
 
-        // Pass updated state to achievement check
         const updatedTasks = tasks.map(t => t.id === taskId ? updatedTask : t);
         await checkAchievements(updatedTasks, habits);
     };
@@ -236,98 +491,222 @@ export const DataProvider = ({ children }) => {
             await addXP(-(task.xpValue || 20));
         }
 
-        // Stop timer if this task is currently active
         if (user.activeTimer && user.activeTimer.taskId === id) {
             console.log('[DELETE] Stopping timer for deleted task');
             await updateProfile({ activeTimer: null });
         }
 
         await db.delete('tasks', id);
+        await syncItem('tasks', { id }, true);
         await refreshData();
     };
 
     const reorderTasks = async (newOrder) => {
+        // This usually just updates indices. We'd need to save all changed tasks.
+        // For simplicity, we just set state. If we want to persist order, we need to save each task.
         setTasks(newOrder);
+        // Implement bulk sync if order is a property on task objects.
+    };
+
+    const toggleSubtask = async (taskId, subtaskId) => {
+        const task = tasks.find(t => t.id === taskId);
+        if (!task || !task.subtasks) return;
+
+        const updatedSubtasks = task.subtasks.map(s =>
+            s.id === subtaskId ? { ...s, completed: !s.completed } : s
+        );
+
+        let newStatus = task.status;
+        let newCompletedAt = task.completedAt;
+
+        // Auto-complete logic based on subtasks
+        const allCompleted = updatedSubtasks.length > 0 && updatedSubtasks.every(s => s.completed);
+
+        if (allCompleted && task.status !== 'completed') {
+            newStatus = 'completed';
+            newCompletedAt = new Date().toISOString();
+            await addXP(task.xpValue || 20);
+        } else if (!allCompleted && task.status === 'completed') {
+            // Reopen if no longer all completed
+            newStatus = 'todo';
+            newCompletedAt = null;
+            await addXP(-(task.xpValue || 20));
+        }
+
+        const updatedTask = {
+            ...task,
+            subtasks: updatedSubtasks,
+            status: newStatus,
+            completedAt: newCompletedAt,
+            updatedAt: new Date().toISOString()
+        };
+
+        await db.put('tasks', updatedTask);
+        await syncItem('tasks', updatedTask);
+        await refreshData();
     };
 
     const addSleepLog = async (entry) => {
-        await db.put('sleep_logs', entry);
+        // Sleep logs use 'date' as key in DB config.
+        // We'll treat date as ID
+        const newEntry = { ...entry, id: entry.date, updatedAt: new Date().toISOString() };
+        await db.put('sleep_logs', newEntry);
+        await syncItem('sleep_logs', newEntry);
         await addXP(15);
         await refreshData();
     };
 
     const updateSleepLog = async (entry) => {
-        await db.put('sleep_logs', entry);
+        const updatedEntry = { ...entry, id: entry.date, updatedAt: new Date().toISOString() };
+        await db.put('sleep_logs', updatedEntry);
+        await syncItem('sleep_logs', updatedEntry);
         await refreshData();
     };
 
     const deleteSleepLog = async (date) => {
         await db.delete('sleep_logs', date);
+        await syncItem('sleep_logs', { id: date }, true);
         await refreshData();
     };
 
     const addJournalEntry = async (entry) => {
-        await db.add('journal_entries', { ...entry, createdAt: new Date() });
+        const newEntry = {
+            ...entry,
+            id: crypto.randomUUID(),
+            createdAt: new Date(),
+            updatedAt: new Date().toISOString()
+        };
+        await db.add('journal_entries', newEntry);
+        await syncItem('journal_entries', newEntry);
         await addXP(15);
         await refreshData();
     };
 
     const updateJournalEntry = async (entry) => {
-        await db.put('journal_entries', entry);
+        const updatedEntry = { ...entry, updatedAt: new Date().toISOString() };
+        await db.put('journal_entries', updatedEntry);
+        await syncItem('journal_entries', updatedEntry);
         await refreshData();
     };
 
     const deleteJournalEntry = async (id) => {
         await db.delete('journal_entries', id);
+        await syncItem('journal_entries', { id }, true);
         await refreshData();
     };
 
     const addReminder = async (reminder) => {
-        await db.add('reminders', { ...reminder, createdAt: new Date() });
+        const newReminder = {
+            ...reminder,
+            id: crypto.randomUUID(),
+            createdAt: new Date(),
+            updatedAt: new Date().toISOString()
+        };
+        await db.add('reminders', newReminder);
+        await syncItem('reminders', newReminder);
         await refreshData();
     };
 
     const deleteReminder = async (id) => {
         await db.delete('reminders', id);
+        await syncItem('reminders', { id }, true);
         await refreshData();
     };
 
     const addCalendarEvent = async (event) => {
-        await db.add('calendar_events', { ...event, createdAt: new Date() });
+        const newEvent = {
+            ...event,
+            id: crypto.randomUUID(),
+            createdAt: new Date(),
+            updatedAt: new Date().toISOString()
+        };
+        await db.add('calendar_events', newEvent);
+        await syncItem('calendar_events', newEvent);
         await refreshData();
     };
 
     const updateCalendarEvent = async (event) => {
-        await db.put('calendar_events', event);
+        const updatedEvent = { ...event, updatedAt: new Date().toISOString() };
+        await db.put('calendar_events', updatedEvent);
+        await syncItem('calendar_events', updatedEvent);
         await refreshData();
     };
 
     const deleteCalendarEvent = async (id) => {
         await db.delete('calendar_events', id);
+        await syncItem('calendar_events', { id }, true);
         await refreshData();
     };
 
     const toggleCalendarLayer = async (layerId) => {
+        // Toggle logic ...
         let newLayers = [...calendarLayers];
         const layerIndex = newLayers.findIndex(l => l.id === layerId);
 
         if (layerIndex >= 0) {
             newLayers[layerIndex] = { ...newLayers[layerIndex], enabled: !newLayers[layerIndex].enabled };
         } else {
-            // Should not happen for system layers, but for new custom logic
             return;
         }
 
-        // Save all layers to DB to persist state
         for (const layer of newLayers) {
             await db.put('calendar_layers', layer);
+            // System layers might use fixed IDs. Custom layers need proper sync.
+            // For now, we only sync if it has an ID.
+            if (layer.id) await syncItem('calendar_layers', { ...layer, updatedAt: new Date().toISOString() });
         }
-        setCalendarLayers(newLayers); // Optimistic update
+        setCalendarLayers(newLayers);
     };
 
     const addCalendarLayer = async (layer) => {
-        await db.add('calendar_layers', layer);
+        // We'll treat ID as provided or UUID
+        const newLayer = {
+            ...layer,
+            id: layer.id || crypto.randomUUID(),
+            updatedAt: new Date().toISOString()
+        };
+        await db.add('calendar_layers', newLayer);
+        await syncItem('calendar_layers', newLayer);
         await refreshData();
+    };
+
+    const addReward = async (reward) => {
+        const newReward = {
+            ...reward,
+            id: crypto.randomUUID(),
+            createdAt: new Date(),
+            updatedAt: new Date().toISOString()
+        };
+        await db.add('rewards', newReward);
+        await syncItem('rewards', newReward);
+        await refreshData();
+    };
+
+    const deleteReward = async (id) => {
+        await db.delete('rewards', id);
+        await syncItem('rewards', { id }, true);
+        await refreshData();
+    };
+
+    const redeemReward = async (reward) => {
+        if (user.xp < reward.cost) return false;
+
+        await addXP(-reward.cost);
+
+        const historyItem = {
+            id: crypto.randomUUID(),
+            rewardId: reward.id,
+            rewardName: reward.name,
+            cost: reward.cost,
+            redeemedAt: new Date(),
+            icon: reward.icon,
+            updatedAt: new Date().toISOString()
+        };
+        await db.add('reward_history', historyItem);
+        await syncItem('reward_history', historyItem);
+
+        await refreshData();
+        return true;
     };
 
     const value = {
@@ -344,6 +723,7 @@ export const DataProvider = ({ children }) => {
         toggleTask,
         deleteTask,
         reorderTasks,
+        toggleSubtask,
         addGoal,
         updateGoal,
         deleteGoal,
@@ -362,6 +742,7 @@ export const DataProvider = ({ children }) => {
         addReminder,
         deleteReminder,
         addCategory,
+        updateCategory,
         deleteCategory,
         refreshData,
         calendarEvents,
@@ -371,6 +752,12 @@ export const DataProvider = ({ children }) => {
         deleteCalendarEvent,
         toggleCalendarLayer,
         addCalendarLayer,
+        rewards,
+        rewardHistory,
+        addReward,
+        deleteReward,
+        redeemReward,
+        pushAllToCloud,
         activeTimer: user.activeTimer || null,
         timerLogs,
         timerSettings: user.settings?.timer || { efficiency: 0.6, checkInInterval: 30 },
@@ -438,16 +825,19 @@ export const DataProvider = ({ children }) => {
                 const productiveDuration = Math.round(duration * efficiency);
 
                 const logEntry = {
+                    id: crypto.randomUUID(),
                     taskId,
                     startTime,
                     endTime: new Date().toISOString(),
                     duration,
                     productiveDuration,
                     checkIns,
-                    createdAt: new Date()
+                    createdAt: new Date(),
+                    updatedAt: new Date().toISOString()
                 };
 
                 await db.add('timer_logs', logEntry);
+                await syncItem('timer_logs', logEntry);
 
                 const xpEarned = Math.floor((productiveDuration / 1800) * 5);
                 if (xpEarned > 0) {
