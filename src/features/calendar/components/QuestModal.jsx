@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { X, Clock, Tag, AlertCircle, Calendar, Trophy, FileText, AlignLeft, Plus, Trash2, CheckCircle2, Circle } from 'lucide-react';
+import { X, Clock, Tag, AlertCircle, Calendar, Trophy, FileText, AlignLeft, Plus, Trash2, CheckCircle2, Circle, Repeat } from 'lucide-react';
 import { format, addDays, isSameDay } from 'date-fns';
 import { Button } from '../../../components/ui/Button';
 
 const PRIORITIES = ['Low', 'Medium', 'High'];
 const CATEGORIES = ['Work', 'Personal', 'Urgent', 'General', 'Health', 'Social'];
+const DAYS_OF_WEEK = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
 export const QuestModal = ({ isOpen, onClose, onSave, onDelete, initialData, selectedDate, availableCategories = [] }) => {
     const [title, setTitle] = useState('');
@@ -17,6 +18,8 @@ export const QuestModal = ({ isOpen, onClose, onSave, onDelete, initialData, sel
     const [notes, setNotes] = useState('');
     const [subtasks, setSubtasks] = useState([]);
     const [newSubtask, setNewSubtask] = useState('');
+    const [repeatEnabled, setRepeatEnabled] = useState(false);
+    const [repeatDays, setRepeatDays] = useState([]);
 
     // Merge defaults with passed categories
     const allCategories = Array.from(new Set([...CATEGORIES, ...availableCategories]));
@@ -31,6 +34,8 @@ export const QuestModal = ({ isOpen, onClose, onSave, onDelete, initialData, sel
                 setXpValue(initialData.xpValue || 25);
                 setNotes(initialData.notes || '');
                 setSubtasks(initialData.subtasks || []);
+                setRepeatEnabled(initialData.repeatEnabled || false);
+                setRepeatDays(initialData.repeatDays || []);
 
                 const d = new Date(initialData.dueDate || initialData.startTime || new Date());
                 if (!isNaN(d.getTime())) {
@@ -63,6 +68,8 @@ export const QuestModal = ({ isOpen, onClose, onSave, onDelete, initialData, sel
                 setNotes('');
                 setSubtasks([]);
                 setNewSubtask('');
+                setRepeatEnabled(false);
+                setRepeatDays([]);
                 const d = selectedDate ? new Date(selectedDate) : new Date();
                 setDate(d.toISOString().split('T')[0]);
                 setStartTime('');
@@ -99,6 +106,15 @@ export const QuestModal = ({ isOpen, onClose, onSave, onDelete, initialData, sel
 
     if (!isOpen) return null;
 
+    // Toggle a day in the repeat days array
+    const toggleRepeatDay = (day) => {
+        setRepeatDays(prev =>
+            prev.includes(day)
+                ? prev.filter(d => d !== day)
+                : [...prev, day]
+        );
+    };
+
     const handleSubmit = (e) => {
         e.preventDefault();
 
@@ -133,7 +149,9 @@ export const QuestModal = ({ isOpen, onClose, onSave, onDelete, initialData, sel
             startTime: finalDueDate,
             endTime: finalEndTime,
             notes,
-            subtasks
+            subtasks,
+            repeatEnabled,
+            repeatDays: repeatEnabled ? repeatDays : []
         });
         onClose();
     };
@@ -206,6 +224,49 @@ export const QuestModal = ({ isOpen, onClose, onSave, onDelete, initialData, sel
                                 className="w-full bg-zinc-900/50 border border-zinc-800 rounded-xl px-4 py-3 text-lg text-white placeholder:text-zinc-600 focus:outline-none focus:border-[#FBFF00]/50 focus:ring-1 focus:ring-[#FBFF00]/20 transition-all font-medium"
                                 autoFocus
                             />
+                        </div>
+
+                        {/* Repeat Toggle Section */}
+                        <div className="bg-zinc-900/30 border border-zinc-800/50 rounded-xl p-4 space-y-4">
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                    <Repeat size={18} className={repeatEnabled ? 'text-[#FBFF00]' : 'text-zinc-500'} />
+                                    <div>
+                                        <p className="text-sm font-medium text-zinc-300">Repeat Weekly</p>
+                                        <p className="text-xs text-zinc-600">Set days to repeat this quest</p>
+                                    </div>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => setRepeatEnabled(!repeatEnabled)}
+                                    className={`relative w-12 h-6 rounded-full transition-all duration-200 ${repeatEnabled
+                                            ? 'bg-[#FBFF00]'
+                                            : 'bg-zinc-700'
+                                        }`}
+                                >
+                                    <span className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow-md transition-all duration-200 ${repeatEnabled ? 'left-7' : 'left-1'
+                                        }`} />
+                                </button>
+                            </div>
+
+                            {/* Day Selector - only shown when repeat is enabled */}
+                            {repeatEnabled && (
+                                <div className="flex gap-2 flex-wrap pt-2 border-t border-zinc-800/50">
+                                    {DAYS_OF_WEEK.map(day => (
+                                        <button
+                                            key={day}
+                                            type="button"
+                                            onClick={() => toggleRepeatDay(day)}
+                                            className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase transition-all duration-150 ${repeatDays.includes(day)
+                                                    ? 'bg-[#FBFF00] text-black shadow-[0_0_10px_rgba(251,255,0,0.3)]'
+                                                    : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-300'
+                                                }`}
+                                        >
+                                            {day}
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
                         </div>
 
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">

@@ -265,15 +265,15 @@ export function ZenciaWidget({ user, todayScore, nextLevelXP }) {
                                     style={{
                                         background: `linear-gradient(90deg, #b98e0a 0%, #eab308 50%, ${NEON_YELLOW} 100%)`
                                     }}
-                                    initial={{ width: 0 }}
                                     animate={{ width: `${(user.xp / nextLevelXP) * 100}%` }}
-                                    transition={{ duration: 1.5, ease: "circOut" }}
+                                    transition={{ duration: 1, ease: "easeOut" }}
                                 />
                                 {/* Shimmer effect */}
                                 <motion.div
                                     className="absolute top-0 bottom-0 w-10 bg-white/30 skew-x-12 blur-sm"
-                                    animate={{ x: [-50, 300] }}
-                                    transition={{ duration: 2, repeat: Infinity, repeatDelay: 3 }}
+                                    initial={{ left: "-20%" }}
+                                    animate={{ left: "120%" }}
+                                    transition={{ duration: 1.5, repeat: Infinity, repeatDelay: 2, ease: "linear" }}
                                 />
                             </div>
                             <p className="text-[10px] text-gray-500 mt-1.5 flex items-center gap-1">

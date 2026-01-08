@@ -92,12 +92,12 @@ export const QuotesWidget = () => {
                         </div>
 
                         {/* The Quote */}
-                        <h1
+                        <blockquote
                             key={currentIndex} // Key change triggers animation
                             className="text-base md:text-lg font-bold leading-tight tracking-tight transition-all duration-700 ease-out transform translate-y-0 opacity-100 animate-slideUp text-white"
                         >
                             "{currentQuote.text}"
-                        </h1>
+                        </blockquote>
 
                         {/* The Author */}
                         <div className="flex items-center justify-center md:justify-start gap-2">

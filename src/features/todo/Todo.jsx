@@ -11,6 +11,7 @@ import { CSS } from '@dnd-kit/utilities';
 import { cn } from '../../lib/utils';
 import { QuestModal } from '../calendar/components/QuestModal';
 import { format, addDays, isSameDay } from 'date-fns';
+import { SEOHead } from '../../components/seo/SEOHead';
 
 // Priority Colors
 const PRIORITY_COLORS = {
@@ -196,6 +197,9 @@ export function Todo() {
         return format(viewDate, 'MMM d, yyyy');
     };
 
+    // Day names for repeat matching
+    const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
     const activeTasks = tasks
         .filter(t => t.status !== 'completed')
         .filter(t => filterCategory === 'All' || t.category === filterCategory)
@@ -204,7 +208,20 @@ export function Todo() {
             if (!t.dueDate) return isSameDay(viewDate, new Date()); // No date -> Today
 
             const taskDate = new Date(t.dueDate);
+
+            // Check if original due date matches
             if (isSameDay(taskDate, viewDate)) return true;
+
+            // Check if this is a repeat day (and not excluded)
+            const viewDayName = DAY_NAMES[viewDate.getDay()];
+            const viewDateKey = format(viewDate, 'yyyy-MM-dd');
+            const isExcluded = t.repeatExclusions &&
+                Array.isArray(t.repeatExclusions) &&
+                t.repeatExclusions.includes(viewDateKey);
+
+            if (t.repeatEnabled && Array.isArray(t.repeatDays) && t.repeatDays.includes(viewDayName) && !isExcluded) {
+                return true;
+            }
 
             // If viewing today, show overdue
             if (isSameDay(viewDate, new Date()) && taskDate < new Date().setHours(0, 0, 0, 0)) return true;
@@ -288,159 +305,166 @@ export function Todo() {
 
 
     return (
-        <div className="max-w-7xl mx-auto space-y-8">
-            <div className="flex items-center justify-between">
-                <h1 className="text-4xl md:text-5xl font-bold bg-gradient-to-r from-white via-white to-zinc-500 bg-clip-text text-transparent">Quests & Reminders</h1>
+        <>
+            <SEOHead
+                title="Quests & Reminders"
+                description="Manage your daily quests and reminders. Prioritize tasks and earn XP for completing them."
+                path="/todo"
+            />
+            <div className="max-w-7xl mx-auto space-y-8">
+                <div className="flex items-center justify-between">
+                    <h1 className="text-4xl md:text-5xl font-bold bg-gradient-to-r from-white via-white to-zinc-500 bg-clip-text text-transparent">Quests & Reminders</h1>
 
-                {/* Global Controls */}
-                <div className="flex items-center gap-4">
-                    <Select
-                        value={sortBy}
-                        onChange={e => setSortBy(e.target.value)}
-                        className="bg-zinc-900 border-zinc-700 text-sm py-1 h-8 w-32"
-                    >
-                        <option value="Priority">Sort: Priority</option>
-                        <option value="Order">Sort: Manual</option>
-                    </Select>
-                    <Select
-                        value={filterCategory}
-                        onChange={e => setFilterCategory(e.target.value)}
-                        className="bg-zinc-900 border-zinc-700 text-sm py-1 h-8 w-32"
-                    >
-                        <option value="All">All Categories</option>
-                        <option value="General">General</option>
-                        <option value="Work">Work</option>
-                        <option value="Personal">Personal</option>
-                        <option value="Urgent">Urgent</option>
-                        {categories.map(cat => (
-                            <option key={cat.id} value={cat.name}>{cat.name}</option>
-                        ))}
-                    </Select>
-                </div>
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-                {/* Left Column: Quests (60-65% width) -> col-span-8 */}
-                <div className="lg:col-span-8 space-y-6">
-
-                    {/* Navigation & Add Bar */}
-                    <Card className="p-4 bg-zinc-900/80 border-zinc-800 flex justify-between items-center sticky top-20 z-30 backdrop-blur-md">
-                        <div className="flex items-center gap-3">
-                            <Button size="icon" variant="ghost" className="h-8 w-8 text-zinc-400 hover:text-white" onClick={() => handleDateNav(-1)}>
-                                <ChevronLeft className="w-5 h-5" />
-                            </Button>
-                            <span className="text-lg font-bold text-white uppercase tracking-wider min-w-[120px] text-center">{getNavLabel()}</span>
-                            <Button size="icon" variant="ghost" className="h-8 w-8 text-zinc-400 hover:text-white" onClick={() => handleDateNav(1)}>
-                                <ChevronRight className="w-5 h-5" />
-                            </Button>
-                        </div>
-
-                        <Button
-                            className="bg-[#FBFF00] hover:bg-[#e1e600] text-black font-bold flex items-center gap-2 shadow-[0_0_15px_rgba(251,255,0,0.2)]"
-                            onClick={openNewQuestModal}
+                    {/* Global Controls */}
+                    <div className="flex items-center gap-4">
+                        <Select
+                            value={sortBy}
+                            onChange={e => setSortBy(e.target.value)}
+                            className="bg-zinc-900 border-zinc-700 text-sm py-1 h-8 w-32"
                         >
-                            <Plus className="w-4 h-4" />
-                            Add Quest
-                        </Button>
-                    </Card>
+                            <option value="Priority">Sort: Priority</option>
+                            <option value="Order">Sort: Manual</option>
+                        </Select>
+                        <Select
+                            value={filterCategory}
+                            onChange={e => setFilterCategory(e.target.value)}
+                            className="bg-zinc-900 border-zinc-700 text-sm py-1 h-8 w-32"
+                        >
+                            <option value="All">All Categories</option>
+                            <option value="General">General</option>
+                            <option value="Work">Work</option>
+                            <option value="Personal">Personal</option>
+                            <option value="Urgent">Urgent</option>
+                            {categories.map(cat => (
+                                <option key={cat.id} value={cat.name}>{cat.name}</option>
+                            ))}
+                        </Select>
+                    </div>
+                </div>
 
-                    {/* Quest List */}
-                    <DndContext
-                        sensors={sensors}
-                        collisionDetection={closestCenter}
-                        onDragEnd={handleDragEnd}
-                    >
-                        <SortableContext items={activeTasks.map(t => t.id)} strategy={verticalListSortingStrategy}>
-                            <div className="space-y-3">
-                                {activeTasks.map(task => (
-                                    <SortableTaskItem
-                                        key={task.id}
-                                        task={task}
-                                        onToggle={toggleTask}
-                                        onDelete={deleteTask}
-                                        onEdit={handleEditTask}
-                                        onMoveToNextDay={handleMoveToNextDay}
-                                        onStartTimer={startTimer}
-                                        activeTimer={activeTimer}
-                                        totalDuration={getTaskDuration(task.id)}
-                                        onToggleSubtask={toggleSubtask}
-                                    />
-                                ))}
-                                {activeTasks.length === 0 && (
-                                    <div className="text-center py-20 flex flex-col items-center gap-4 text-zinc-500">
-                                        <Trophy className="w-12 h-12 opacity-50" />
-                                        <p>No active quests for {getNavLabel()}.</p>
-                                        <Button variant="outline" onClick={openNewQuestModal}>Create One</Button>
-                                    </div>
-                                )}
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                    {/* Left Column: Quests (60-65% width) -> col-span-8 */}
+                    <div className="lg:col-span-8 space-y-6">
+
+                        {/* Navigation & Add Bar */}
+                        <Card className="p-4 bg-zinc-900/80 border-zinc-800 flex justify-between items-center sticky top-20 z-30 backdrop-blur-md">
+                            <div className="flex items-center gap-3">
+                                <Button size="icon" variant="ghost" className="h-8 w-8 text-zinc-400 hover:text-white" onClick={() => handleDateNav(-1)}>
+                                    <ChevronLeft className="w-5 h-5" />
+                                </Button>
+                                <span className="text-lg font-bold text-white uppercase tracking-wider min-w-[120px] text-center">{getNavLabel()}</span>
+                                <Button size="icon" variant="ghost" className="h-8 w-8 text-zinc-400 hover:text-white" onClick={() => handleDateNav(1)}>
+                                    <ChevronRight className="w-5 h-5" />
+                                </Button>
                             </div>
-                        </SortableContext>
-                    </DndContext>
 
-                    {/* Completed Tasks */}
-                    {completedTasks.length > 0 && (
-                        <div className="pt-8 border-t border-zinc-800">
-                            <h3 className="text-lg font-bold text-zinc-400 mb-4">Completed on {getNavLabel()}</h3>
-                            <div className="space-y-2 opacity-60">
-                                {completedTasks.map(task => (
-                                    <div key={task.id} className="flex items-center justify-between p-3 bg-zinc-900/30 rounded-lg border border-zinc-800/50 group">
-                                        <div className="flex items-center gap-3">
-                                            <button
-                                                onClick={() => toggleTask(task.id)}
-                                                className="text-neon-400 hover:text-neon-300 transition-colors"
-                                                title="Undo"
-                                            >
-                                                <CheckCircle className="w-5 h-5" />
-                                            </button>
-                                            <div>
-                                                <span className="line-through text-zinc-500 block">{task.title}</span>
-                                                {task.notes && <span className="text-xs text-zinc-600 block">{task.notes}</span>}
+                            <Button
+                                className="bg-[#FBFF00] hover:bg-[#e1e600] text-black font-bold flex items-center gap-2 shadow-[0_0_15px_rgba(251,255,0,0.2)]"
+                                onClick={openNewQuestModal}
+                            >
+                                <Plus className="w-4 h-4" />
+                                Add Quest
+                            </Button>
+                        </Card>
+
+                        {/* Quest List */}
+                        <DndContext
+                            sensors={sensors}
+                            collisionDetection={closestCenter}
+                            onDragEnd={handleDragEnd}
+                        >
+                            <SortableContext items={activeTasks.map(t => t.id)} strategy={verticalListSortingStrategy}>
+                                <div className="space-y-3">
+                                    {activeTasks.map(task => (
+                                        <SortableTaskItem
+                                            key={task.id}
+                                            task={task}
+                                            onToggle={toggleTask}
+                                            onDelete={deleteTask}
+                                            onEdit={handleEditTask}
+                                            onMoveToNextDay={handleMoveToNextDay}
+                                            onStartTimer={startTimer}
+                                            activeTimer={activeTimer}
+                                            totalDuration={getTaskDuration(task.id)}
+                                            onToggleSubtask={toggleSubtask}
+                                        />
+                                    ))}
+                                    {activeTasks.length === 0 && (
+                                        <div className="text-center py-20 flex flex-col items-center gap-4 text-zinc-500">
+                                            <Trophy className="w-12 h-12 opacity-50" />
+                                            <p>No active quests for {getNavLabel()}.</p>
+                                            <Button variant="outline" onClick={openNewQuestModal}>Create One</Button>
+                                        </div>
+                                    )}
+                                </div>
+                            </SortableContext>
+                        </DndContext>
+
+                        {/* Completed Tasks */}
+                        {completedTasks.length > 0 && (
+                            <div className="pt-8 border-t border-zinc-800">
+                                <h3 className="text-lg font-bold text-zinc-400 mb-4">Completed on {getNavLabel()}</h3>
+                                <div className="space-y-2 opacity-60">
+                                    {completedTasks.map(task => (
+                                        <div key={task.id} className="flex items-center justify-between p-3 bg-zinc-900/30 rounded-lg border border-zinc-800/50 group">
+                                            <div className="flex items-center gap-3">
+                                                <button
+                                                    onClick={() => toggleTask(task.id)}
+                                                    className="text-neon-400 hover:text-neon-300 transition-colors"
+                                                    title="Undo"
+                                                >
+                                                    <CheckCircle className="w-5 h-5" />
+                                                </button>
+                                                <div>
+                                                    <span className="line-through text-zinc-500 block">{task.title}</span>
+                                                    {task.notes && <span className="text-xs text-zinc-600 block">{task.notes}</span>}
+                                                </div>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-xs text-neon-400">+{task.xpValue} XP</span>
+                                                <Button variant="ghost" size="icon" onClick={() => deleteTask(task.id)} className="opacity-0 group-hover:opacity-100 transition-opacity">
+                                                    <Trash2 className="w-4 h-4 text-red-500" />
+                                                </Button>
                                             </div>
                                         </div>
-                                        <div className="flex items-center gap-2">
-                                            <span className="text-xs text-neon-400">+{task.xpValue} XP</span>
-                                            <Button variant="ghost" size="icon" onClick={() => deleteTask(task.id)} className="opacity-0 group-hover:opacity-100 transition-opacity">
-                                                <Trash2 className="w-4 h-4 text-red-500" />
-                                            </Button>
-                                        </div>
-                                    </div>
-                                ))}
+                                    ))}
+                                </div>
                             </div>
-                        </div>
-                    )}
-                </div>
+                        )}
+                    </div>
 
-                {/* Right Column: Reminders (35-40% width) -> col-span-4 */}
-                <div className="lg:col-span-4 space-y-6">
-                    <div className="sticky top-6">
-                        <RemindersWidget isAdding={isAddingReminder} setIsAdding={setIsAddingReminder} />
+                    {/* Right Column: Reminders (35-40% width) -> col-span-4 */}
+                    <div className="lg:col-span-4 space-y-6">
+                        <div className="sticky top-6">
+                            <RemindersWidget isAdding={isAddingReminder} setIsAdding={setIsAddingReminder} />
 
-                        <div className="mt-6 p-4 rounded-xl bg-neon-400/5 border border-neon-400/20">
-                            <h4 className="flex items-center gap-2 text-neon-400 font-bold mb-2">
-                                <AlertCircle className="w-4 h-4" /> Pro Tip
-                            </h4>
-                            <p className="text-xs text-zinc-400 leading-relaxed">
-                                Use reminders for quick, time-sensitive to-dos that don't need XP or complexity.
-                                Keep Quests for your main work.
-                            </p>
+                            <div className="mt-6 p-4 rounded-xl bg-neon-400/5 border border-neon-400/20">
+                                <h4 className="flex items-center gap-2 text-neon-400 font-bold mb-2">
+                                    <AlertCircle className="w-4 h-4" /> Pro Tip
+                                </h4>
+                                <p className="text-xs text-zinc-400 leading-relaxed">
+                                    Use reminders for quick, time-sensitive to-dos that don't need XP or complexity.
+                                    Keep Quests for your main work.
+                                </p>
+                            </div>
                         </div>
                     </div>
                 </div>
-            </div>
 
-            {/* Quest Modal for Add/Edit */}
-            <QuestModal
-                isOpen={isQuestModalOpen}
-                onClose={() => {
-                    setIsQuestModalOpen(false);
-                    setEditingTask(null);
-                }}
-                onSave={handleSaveTask}
-                onDelete={deleteTask}
-                initialData={editingTask}
-                selectedDate={viewDate.toISOString()}
-                availableCategories={categories?.map(c => c.name) || []}
-            />
-        </div>
+                {/* Quest Modal for Add/Edit */}
+                <QuestModal
+                    isOpen={isQuestModalOpen}
+                    onClose={() => {
+                        setIsQuestModalOpen(false);
+                        setEditingTask(null);
+                    }}
+                    onSave={handleSaveTask}
+                    onDelete={deleteTask}
+                    initialData={editingTask}
+                    selectedDate={viewDate.toISOString()}
+                    availableCategories={categories?.map(c => c.name) || []}
+                />
+            </div>
+        </>
     );
 }

@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { UserProvider } from './contexts/UserContext';
 import { DataProvider } from './contexts/DataContext';
 import { AuthProvider } from './contexts/AuthContext';
+import { NotificationProvider } from './contexts/NotificationContext';
 import { Layout } from './components/layout/Layout';
 import { Dashboard } from './features/dashboard/Dashboard';
 import { Goals } from './features/goals/Goals';
@@ -25,21 +26,23 @@ function App() {
                 <AuthProvider>
                     <UserProvider>
                         <DataProvider>
-                            <OnboardingModal />
-                            <Routes>
-                                <Route path="/" element={<Layout />}>
-                                    <Route index element={<Dashboard />} />
-                                    <Route path="goals" element={<Goals />} />
-                                    <Route path="habits" element={<Habits />} />
-                                    <Route path="todo" element={<Todo />} />
-                                    <Route path="sleep" element={<Sleep />} />
-                                    <Route path="journal" element={<Journal />} />
-                                    <Route path="calendar" element={<Calendar />} />
-                                    <Route path="rewards" element={<Rewards />} />
-                                    <Route path="settings" element={<Settings />} />
-                                    <Route path="*" element={<Navigate to="/" replace />} />
-                                </Route>
-                            </Routes>
+                            <NotificationProvider>
+                                <OnboardingModal />
+                                <Routes>
+                                    <Route path="/" element={<Layout />}>
+                                        <Route index element={<Dashboard />} />
+                                        <Route path="goals" element={<Goals />} />
+                                        <Route path="habits" element={<Habits />} />
+                                        <Route path="todo" element={<Todo />} />
+                                        <Route path="sleep" element={<Sleep />} />
+                                        <Route path="journal" element={<Journal />} />
+                                        <Route path="calendar" element={<Calendar />} />
+                                        <Route path="rewards" element={<Rewards />} />
+                                        <Route path="settings" element={<Settings />} />
+                                        <Route path="*" element={<Navigate to="/" replace />} />
+                                    </Route>
+                                </Routes>
+                            </NotificationProvider>
                         </DataProvider>
                     </UserProvider>
                 </AuthProvider>
@@ -49,3 +52,4 @@ function App() {
 }
 
 export default App;
+

@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { format, addDays, startOfWeek, addWeeks, subWeeks, isSameDay, startOfDay, addMinutes, differenceInMinutes, setHours } from 'date-fns';
+import { Pencil, Trash2, ArrowRight, CheckCircle } from 'lucide-react';
 import { useData } from '../../../contexts/DataContext';
 import { CalendarSidebar } from './CalendarSidebar';
 import { CalendarGrid } from './CalendarGrid';
@@ -28,6 +29,8 @@ export function MasterCalendar() {
     const [draggedEvent, setDraggedEvent] = useState(null);
     const [currentTime, setCurrentTime] = useState(new Date());
     const [modalState, setModalState] = useState({ isOpen: false, data: null, selectedDate: null });
+    const [contextMenu, setContextMenu] = useState({ visible: false, x: 0, y: 0, event: null });
+    const contextMenuRef = useRef(null);
 
     const [categoryFilters, setCategoryFilters] = useState({
         'Work': true,
@@ -36,6 +39,19 @@ export function MasterCalendar() {
         'General': true,
         'Reminders': true,
     });
+
+    // Close context menu when clicking outside
+    useEffect(() => {
+        const handleClickOutside = (e) => {
+            if (contextMenuRef.current && !contextMenuRef.current.contains(e.target)) {
+                setContextMenu({ visible: false, x: 0, y: 0, event: null });
+            }
+        };
+        if (contextMenu.visible) {
+            document.addEventListener('mousedown', handleClickOutside);
+        }
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, [contextMenu.visible]);
 
     // Timer for Current Time Indicator
     useEffect(() => {
@@ -122,14 +138,8 @@ export function MasterCalendar() {
     };
 
     const handleEventClick = (event) => {
-        if (event.isTask) {
-            setModalState({
-                isOpen: true,
-                data: event,
-                selectedDate: null
-            });
-        }
-        // Future: Handle Reminder/CalendarEvent editing
+        // Single click does nothing - use double-click for context menu
+        // This prevents accidental edits when clicking to select
     };
 
     const handleSaveQuest = async (questData) => {
@@ -146,6 +156,134 @@ export function MasterCalendar() {
     const handleDeleteQuest = async (id) => {
         await deleteTask(id);
         setModalState({ isOpen: false, data: null, selectedDate: null });
+    };
+
+    // Context Menu Handlers
+    const handleEventDoubleClick = (event, e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (!event.isTask) return; // Only for tasks
+
+        setContextMenu({
+            visible: true,
+            x: e.clientX,
+            y: e.clientY,
+            event: event
+        });
+    };
+
+    const handleContextEdit = () => {
+        if (contextMenu.event) {
+            setModalState({
+                isOpen: true,
+                data: contextMenu.event,
+                selectedDate: null
+            });
+        }
+        setContextMenu({ visible: false, x: 0, y: 0, event: null });
+    };
+
+    const handleContextDelete = async () => {
+        if (contextMenu.event && contextMenu.event.id) {
+            const eventData = contextMenu.event;
+            const originalTask = tasks.find(t => t.id === eventData.id);
+
+            if (originalTask) {
+                // Check if this is a repeat instance
+                if (eventData.isRepeatInstance) {
+                    // For repeat instances: Add this date to exclusions list
+                    // This removes only this occurrence, not the entire recurring task
+                    const instanceDate = new Date(eventData.startTime);
+                    const dateKey = format(instanceDate, 'yyyy-MM-dd');
+
+                    const existingExclusions = originalTask.repeatExclusions || [];
+                    if (!existingExclusions.includes(dateKey)) {
+                        await updateTask({
+                            ...originalTask,
+                            repeatExclusions: [...existingExclusions, dateKey]
+                        });
+                    }
+                } else {
+                    // For original task: Delete the entire task
+                    await deleteTask(originalTask.id);
+                }
+            }
+        }
+        setContextMenu({ visible: false, x: 0, y: 0, event: null });
+    };
+
+    const handleContextNextDay = async () => {
+        if (contextMenu.event && contextMenu.event.id) {
+            const eventData = contextMenu.event;
+            const originalTask = tasks.find(t => t.id === eventData.id);
+
+            if (originalTask) {
+                // Check if this is a repeat instance (not the original occurrence)
+                if (eventData.isRepeatInstance) {
+                    // For repeat instances: Create a NEW independent task for the next day
+                    // This doesn't affect the original recurring task
+                    const instanceDate = new Date(eventData.startTime);
+                    const nextDate = addDays(instanceDate, 1);
+
+                    const duration = eventData.endTime
+                        ? differenceInMinutes(new Date(eventData.endTime), new Date(eventData.startTime))
+                        : 60;
+
+                    const newTaskEndTime = addMinutes(nextDate, duration);
+
+                    // Create new independent task (no repeat)
+                    const { id, repeatEnabled, repeatDays, isRepeatInstance, ...taskWithoutId } = originalTask;
+                    await addTask({
+                        ...taskWithoutId,
+                        dueDate: nextDate.toISOString(),
+                        startTime: nextDate.toISOString(),
+                        endTime: newTaskEndTime.toISOString(),
+                        repeatEnabled: false,
+                        repeatDays: [],
+                        notes: originalTask.notes ? `${originalTask.notes}\n(Moved from repeat)` : '(Moved from repeat)'
+                    });
+                } else {
+                    // For original task: Move the actual task to next day
+                    const currentDate = new Date(originalTask.dueDate || originalTask.startTime);
+                    const nextDate = addDays(currentDate, 1);
+
+                    const newDueDate = nextDate.toISOString();
+                    let newEndTime = null;
+
+                    if (originalTask.endTime) {
+                        const currentEnd = new Date(originalTask.endTime);
+                        const newEnd = addDays(currentEnd, 1);
+                        newEndTime = newEnd.toISOString();
+                    }
+
+                    await updateTask({
+                        ...originalTask,
+                        dueDate: newDueDate,
+                        startTime: newDueDate,
+                        endTime: newEndTime
+                    });
+                }
+            }
+        }
+        setContextMenu({ visible: false, x: 0, y: 0, event: null });
+    };
+
+    const handleContextMarkDone = async () => {
+        if (contextMenu.event && contextMenu.event.id) {
+            const eventData = contextMenu.event;
+            const originalTask = tasks.find(t => t.id === eventData.id);
+
+            if (originalTask) {
+                // Toggle the completion status
+                const newStatus = originalTask.status === 'completed' ? 'pending' : 'completed';
+                await updateTask({
+                    ...originalTask,
+                    status: newStatus,
+                    completedAt: newStatus === 'completed' ? new Date().toISOString() : null
+                });
+            }
+        }
+        setContextMenu({ visible: false, x: 0, y: 0, event: null });
     };
 
     const handleDragStart = (e, event) => {
@@ -179,12 +317,28 @@ export function MasterCalendar() {
         if (draggedEvent.isTask) {
             const originalTask = tasks.find(t => t.id === draggedEvent.id);
             if (originalTask) {
-                await updateTask({
-                    ...originalTask,
-                    dueDate: newStartTime.toISOString(), // Keep legacy field sync
-                    startTime: newStartTime.toISOString(),
-                    endTime: newEndTime.toISOString()
-                });
+                // Check if this is a repeat instance
+                if (draggedEvent.isRepeatInstance) {
+                    // For repeat instances: Create a NEW independent task
+                    const { id, repeatEnabled, repeatDays, isRepeatInstance, ...taskWithoutId } = originalTask;
+                    await addTask({
+                        ...taskWithoutId,
+                        dueDate: newStartTime.toISOString(),
+                        startTime: newStartTime.toISOString(),
+                        endTime: newEndTime.toISOString(),
+                        repeatEnabled: false,
+                        repeatDays: [],
+                        notes: originalTask.notes ? `${originalTask.notes}\n(Moved from repeat)` : '(Moved from repeat)'
+                    });
+                } else {
+                    // For original task: Update the actual task
+                    await updateTask({
+                        ...originalTask,
+                        dueDate: newStartTime.toISOString(),
+                        startTime: newStartTime.toISOString(),
+                        endTime: newEndTime.toISOString()
+                    });
+                }
             }
         }
         // ... (Reminder/CalendarEvent drag logic)
@@ -270,6 +424,7 @@ export function MasterCalendar() {
                                 categoryColors={categoryColors}
                                 onSlotClick={handleSlotClick}
                                 onEventClick={handleEventClick}
+                                onEventDoubleClick={handleEventDoubleClick}
                                 onDragStart={handleDragStart}
                                 onDropEvent={handleDropEvent}
                             />
@@ -277,6 +432,49 @@ export function MasterCalendar() {
                     </div>
                 </div>
             </div>
+
+            {/* Context Menu Tooltip */}
+            {contextMenu.visible && (
+                <div
+                    ref={contextMenuRef}
+                    className="fixed z-50 bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl py-2 min-w-[160px] animate-in fade-in zoom-in-95 duration-150"
+                    style={{
+                        left: `${contextMenu.x}px`,
+                        top: `${contextMenu.y}px`,
+                        transform: 'translate(-50%, 8px)'
+                    }}
+                >
+                    <button
+                        onClick={handleContextEdit}
+                        className="w-full px-4 py-2.5 text-left text-sm text-zinc-300 hover:bg-zinc-800 hover:text-white flex items-center gap-3 transition-colors"
+                    >
+                        <Pencil size={16} className="text-blue-400" />
+                        Edit Quest
+                    </button>
+                    <button
+                        onClick={handleContextNextDay}
+                        className="w-full px-4 py-2.5 text-left text-sm text-zinc-300 hover:bg-zinc-800 hover:text-white flex items-center gap-3 transition-colors"
+                    >
+                        <ArrowRight size={16} className="text-green-400" />
+                        Move to Next Day
+                    </button>
+                    <button
+                        onClick={handleContextMarkDone}
+                        className="w-full px-4 py-2.5 text-left text-sm text-zinc-300 hover:bg-zinc-800 hover:text-white flex items-center gap-3 transition-colors"
+                    >
+                        <CheckCircle size={16} className={contextMenu.event?.status === 'completed' ? 'text-yellow-400' : 'text-emerald-400'} />
+                        {contextMenu.event?.status === 'completed' ? 'Mark as Pending' : 'Mark as Done'}
+                    </button>
+                    <div className="my-1 border-t border-zinc-800" />
+                    <button
+                        onClick={handleContextDelete}
+                        className="w-full px-4 py-2.5 text-left text-sm text-red-400 hover:bg-red-500/10 hover:text-red-300 flex items-center gap-3 transition-colors"
+                    >
+                        <Trash2 size={16} />
+                        Delete Quest
+                    </button>
+                </div>
+            )}
         </div>
     );
 }

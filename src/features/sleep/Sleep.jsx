@@ -19,6 +19,7 @@ import {
     Star
 } from 'lucide-react';
 import { useData } from '../../contexts/DataContext';
+import { SEOHead } from '../../components/seo/SEOHead';
 
 // --- Constants ---
 const NEON_YELLOW = "#fbff00";
@@ -163,241 +164,248 @@ export function Sleep() {
     };
 
     return (
-        <div className="min-h-screen text-white font-sans selection:bg-[#fbff00]/30 -m-8 p-8 relative overflow-hidden">
-            {/* Background Decor - ensuring it stays within this container */}
-            <div className="fixed top-0 left-0 w-full h-full overflow-hidden pointer-events-none z-0">
-                <div className="absolute top-[10%] right-[10%] w-[500px] h-[500px] rounded-full blur-[120px] opacity-20 mix-blend-screen"
-                    style={{ backgroundColor: NEON_YELLOW }} />
-                <div className="absolute bottom-[10%] left-[10%] w-[600px] h-[600px] bg-indigo-900/20 rounded-full blur-[120px] opacity-30 mix-blend-screen" />
-            </div>
-
-            <div className="relative z-10 max-w-6xl mx-auto space-y-8">
-
-                {/* Header */}
-                <header className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-                    <div className="space-y-1">
-                        <h1 className="text-4xl md:text-5xl font-bold bg-gradient-to-r from-white via-white to-zinc-500 bg-clip-text text-transparent">
-                            Sleep Tracker
-                        </h1>
-                        <p className="text-zinc-400 flex items-center gap-2 text-sm md:text-base">
-                            <Star size={14} fill={NEON_YELLOW} color={NEON_YELLOW} />
-                            paduko bhai soja
-                        </p>
-                    </div>
-                    <button
-                        onClick={() => setIsModalOpen(true)}
-                        className="group relative px-6 py-3 rounded-full text-black font-bold shadow-[0_0_20px_-5px_rgba(251,255,0,0.4)] transition-all duration-300 active:scale-95 flex items-center justify-center gap-2 hover:bg-[#e6eb00]"
-                        style={{ backgroundColor: NEON_YELLOW }}
-                    >
-                        <Plus size={20} className="transition-transform group-hover:rotate-90" />
-                        <span>Log Sleep</span>
-                    </button>
-                </header>
-
-                {/* Stats Grid */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <StatCard
-                        icon={Moon}
-                        value={`${stats.avg}h`}
-                        label="Average Sleep"
-                        subtext="Last 30 entries"
-                        trend={stats.avg >= 7 ? 12 : -5}
-                    />
-                    <StatCard
-                        icon={Activity}
-                        value={`${stats.goalMet}%`}
-                        label="Goal Met"
-                        subtext="Target: 8h / night"
-                    />
-                    <StatCard
-                        icon={Calendar}
-                        value={stats.total}
-                        label="Total Entries"
-                        subtext="All time logs"
-                    />
+        <>
+            <SEOHead
+                title="Sleep Tracker"
+                description="Track your sleep patterns and quality. Visualize trends and improve your rest."
+                path="/sleep"
+            />
+            <div className="min-h-screen text-white font-sans selection:bg-[#fbff00]/30 -m-8 p-8 relative overflow-hidden">
+                {/* Background Decor - ensuring it stays within this container */}
+                <div className="fixed top-0 left-0 w-full h-full overflow-hidden pointer-events-none z-0">
+                    <div className="absolute top-[10%] right-[10%] w-[500px] h-[500px] rounded-full blur-[120px] opacity-20 mix-blend-screen"
+                        style={{ backgroundColor: NEON_YELLOW }} />
+                    <div className="absolute bottom-[10%] left-[10%] w-[600px] h-[600px] bg-indigo-900/20 rounded-full blur-[120px] opacity-30 mix-blend-screen" />
                 </div>
 
-                {/* Main Chart Section */}
-                <GlassCard className="min-h-[400px]">
-                    <div className="flex items-center justify-between mb-8">
-                        <div>
-                            <h3 className="text-xl font-bold text-white mb-1">Sleep Trends</h3>
-                            <p className="text-sm text-zinc-400">Duration over time</p>
+                <div className="relative z-10 max-w-6xl mx-auto space-y-8">
+
+                    {/* Header */}
+                    <header className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+                        <div className="space-y-1">
+                            <h1 className="text-4xl md:text-5xl font-bold bg-gradient-to-r from-white via-white to-zinc-500 bg-clip-text text-transparent">
+                                Sleep Tracker
+                            </h1>
+                            <p className="text-zinc-400 flex items-center gap-2 text-sm md:text-base">
+                                <Star size={14} fill={NEON_YELLOW} color={NEON_YELLOW} />
+                                paduko bhai soja
+                            </p>
                         </div>
-                        {/* Legend */}
-                        <div className="flex gap-4 text-xs font-medium text-zinc-500">
-                            <div className="flex items-center gap-2">
-                                <span className="w-2 h-2 rounded-full box-shadow-lg" style={{ backgroundColor: NEON_YELLOW, boxShadow: `0 0 10px ${NEON_YELLOW}50` }} />
-                                Duration
-                            </div>
-                            <div className="flex items-center gap-2">
-                                <span className="w-2 h-2 rounded-full border border-dashed border-zinc-600" />
-                                8h Goal
-                            </div>
-                        </div>
+                        <button
+                            onClick={() => setIsModalOpen(true)}
+                            className="group relative px-6 py-3 rounded-full text-black font-bold shadow-[0_0_20px_-5px_rgba(251,255,0,0.4)] transition-all duration-300 active:scale-95 flex items-center justify-center gap-2 hover:bg-[#e6eb00]"
+                            style={{ backgroundColor: NEON_YELLOW }}
+                        >
+                            <Plus size={20} className="transition-transform group-hover:rotate-90" />
+                            <span>Log Sleep</span>
+                        </button>
+                    </header>
+
+                    {/* Stats Grid */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <StatCard
+                            icon={Moon}
+                            value={`${stats.avg}h`}
+                            label="Average Sleep"
+                            subtext="Last 30 entries"
+                            trend={stats.avg >= 7 ? 12 : -5}
+                        />
+                        <StatCard
+                            icon={Activity}
+                            value={`${stats.goalMet}%`}
+                            label="Goal Met"
+                            subtext="Target: 8h / night"
+                        />
+                        <StatCard
+                            icon={Calendar}
+                            value={stats.total}
+                            label="Total Entries"
+                            subtext="All time logs"
+                        />
                     </div>
 
-                    <div className="h-[300px] w-full">
-                        <ResponsiveContainer width="100%" height="100%">
-                            <AreaChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                                <defs>
-                                    <linearGradient id="colorSleep" x1="0" y1="0" x2="0" y2="1">
-                                        <stop offset="5%" stopColor={NEON_YELLOW} stopOpacity={0.3} />
-                                        <stop offset="95%" stopColor={NEON_YELLOW} stopOpacity={0} />
-                                    </linearGradient>
-                                </defs>
-                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#ffffff10" />
-                                <XAxis
-                                    dataKey="date"
-                                    axisLine={false}
-                                    tickLine={false}
-                                    tick={{ fill: '#71717a', fontSize: 12 }}
-                                    dy={10}
-                                />
-                                <YAxis
-                                    axisLine={false}
-                                    tickLine={false}
-                                    tick={{ fill: '#71717a', fontSize: 12 }}
-                                />
-                                <Tooltip content={<CustomTooltip />} cursor={{ stroke: '#ffffff20', strokeWidth: 1 }} />
-                                <ReferenceLine y={8} stroke="#ffffff30" strokeDasharray="3 3" />
-                                <Area
-                                    type="monotone"
-                                    dataKey="hours"
-                                    stroke={NEON_YELLOW}
-                                    strokeWidth={3}
-                                    fillOpacity={1}
-                                    fill="url(#colorSleep)"
-                                    animationDuration={1500}
-                                />
-                            </AreaChart>
-                        </ResponsiveContainer>
-                    </div>
-                </GlassCard>
+                    {/* Main Chart Section */}
+                    <GlassCard className="min-h-[400px]">
+                        <div className="flex items-center justify-between mb-8">
+                            <div>
+                                <h3 className="text-xl font-bold text-white mb-1">Sleep Trends</h3>
+                                <p className="text-sm text-zinc-400">Duration over time</p>
+                            </div>
+                            {/* Legend */}
+                            <div className="flex gap-4 text-xs font-medium text-zinc-500">
+                                <div className="flex items-center gap-2">
+                                    <span className="w-2 h-2 rounded-full box-shadow-lg" style={{ backgroundColor: NEON_YELLOW, boxShadow: `0 0 10px ${NEON_YELLOW}50` }} />
+                                    Duration
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <span className="w-2 h-2 rounded-full border border-dashed border-zinc-600" />
+                                    8h Goal
+                                </div>
+                            </div>
+                        </div>
 
-                {/* Recent History List (Mini) */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <GlassCard className="col-span-1 md:col-span-2">
-                        <h3 className="text-lg font-bold text-white mb-4">Recent History</h3>
-                        <div className="overflow-x-auto">
-                            <table className="w-full text-left border-collapse">
-                                <thead>
-                                    <tr className="text-zinc-500 text-xs uppercase tracking-wider border-b border-white/5">
-                                        <th className="pb-3 pl-2 font-medium">Date</th>
-                                        <th className="pb-3 font-medium">Status</th>
-                                        <th className="pb-3 font-medium">Duration</th>
-                                        <th className="pb-3 pr-2 text-right font-medium">Action</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="text-sm">
-                                    {logs.slice().reverse().slice(0, 5).map((log) => (
-                                        <tr key={log.id || log.date} className="group hover:bg-white/5 transition-colors border-b border-white/5 last:border-0">
-                                            <td className="py-4 pl-2 text-zinc-300">
-                                                {new Date(log.date).toLocaleDateString('en-US', { weekday: 'short', month: 'long', day: 'numeric' })}
-                                            </td>
-                                            <td className="py-4">
-                                                <span className={`px-2 py-1 rounded-full text-xs font-medium border ${log.hours >= 8
-                                                    ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-                                                    : 'bg-red-500/10 text-red-400 border-red-500/20'
-                                                    }`}>
-                                                    {log.hours >= 8 ? 'Good Rest' : 'Sleep Debt'}
-                                                </span>
-                                            </td>
-                                            <td className="py-4 font-semibold text-white">
-                                                {log.hours} hours
-                                            </td>
-                                            <td className="py-4 pr-2 text-right">
-                                                <button
-                                                    onClick={() => deleteSleepLog(log.date)}
-                                                    className="text-zinc-600 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100 p-2"
-                                                >
-                                                    <X size={16} />
-                                                </button>
-                                            </td>
-                                        </tr>
-                                    ))}
-                                    {logs.length === 0 && (
-                                        <tr>
-                                            <td colSpan={4} className="py-8 text-center text-zinc-500 italic">
-                                                No sleep logs yet. Start by tracking tonight's sleep!
-                                            </td>
-                                        </tr>
-                                    )}
-                                </tbody>
-                            </table>
+                        <div className="h-[300px] w-full">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <AreaChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                                    <defs>
+                                        <linearGradient id="colorSleep" x1="0" y1="0" x2="0" y2="1">
+                                            <stop offset="5%" stopColor={NEON_YELLOW} stopOpacity={0.3} />
+                                            <stop offset="95%" stopColor={NEON_YELLOW} stopOpacity={0} />
+                                        </linearGradient>
+                                    </defs>
+                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#ffffff10" />
+                                    <XAxis
+                                        dataKey="date"
+                                        axisLine={false}
+                                        tickLine={false}
+                                        tick={{ fill: '#71717a', fontSize: 12 }}
+                                        dy={10}
+                                    />
+                                    <YAxis
+                                        axisLine={false}
+                                        tickLine={false}
+                                        tick={{ fill: '#71717a', fontSize: 12 }}
+                                    />
+                                    <Tooltip content={<CustomTooltip />} cursor={{ stroke: '#ffffff20', strokeWidth: 1 }} />
+                                    <ReferenceLine y={8} stroke="#ffffff30" strokeDasharray="3 3" />
+                                    <Area
+                                        type="monotone"
+                                        dataKey="hours"
+                                        stroke={NEON_YELLOW}
+                                        strokeWidth={3}
+                                        fillOpacity={1}
+                                        fill="url(#colorSleep)"
+                                        animationDuration={1500}
+                                    />
+                                </AreaChart>
+                            </ResponsiveContainer>
                         </div>
                     </GlassCard>
+
+                    {/* Recent History List (Mini) */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <GlassCard className="col-span-1 md:col-span-2">
+                            <h3 className="text-lg font-bold text-white mb-4">Recent History</h3>
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-left border-collapse">
+                                    <thead>
+                                        <tr className="text-zinc-500 text-xs uppercase tracking-wider border-b border-white/5">
+                                            <th className="pb-3 pl-2 font-medium">Date</th>
+                                            <th className="pb-3 font-medium">Status</th>
+                                            <th className="pb-3 font-medium">Duration</th>
+                                            <th className="pb-3 pr-2 text-right font-medium">Action</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="text-sm">
+                                        {logs.slice().reverse().slice(0, 5).map((log) => (
+                                            <tr key={log.id || log.date} className="group hover:bg-white/5 transition-colors border-b border-white/5 last:border-0">
+                                                <td className="py-4 pl-2 text-zinc-300">
+                                                    {new Date(log.date).toLocaleDateString('en-US', { weekday: 'short', month: 'long', day: 'numeric' })}
+                                                </td>
+                                                <td className="py-4">
+                                                    <span className={`px-2 py-1 rounded-full text-xs font-medium border ${log.hours >= 8
+                                                        ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                                                        : 'bg-red-500/10 text-red-400 border-red-500/20'
+                                                        }`}>
+                                                        {log.hours >= 8 ? 'Good Rest' : 'Sleep Debt'}
+                                                    </span>
+                                                </td>
+                                                <td className="py-4 font-semibold text-white">
+                                                    {log.hours} hours
+                                                </td>
+                                                <td className="py-4 pr-2 text-right">
+                                                    <button
+                                                        onClick={() => deleteSleepLog(log.date)}
+                                                        className="text-zinc-600 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100 p-2"
+                                                    >
+                                                        <X size={16} />
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                        {logs.length === 0 && (
+                                            <tr>
+                                                <td colSpan={4} className="py-8 text-center text-zinc-500 italic">
+                                                    No sleep logs yet. Start by tracking tonight's sleep!
+                                                </td>
+                                            </tr>
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </GlassCard>
+                    </div>
                 </div>
+
+                {/* Log Modal */}
+                <Modal
+                    isOpen={isModalOpen}
+                    onClose={() => setIsModalOpen(false)}
+                    title="Log Sleep Session"
+                >
+                    <form onSubmit={handleSave} className="space-y-6">
+                        <div className="space-y-2">
+                            <label className="text-xs uppercase font-bold text-zinc-500 tracking-wider ml-1">Date</label>
+                            <div
+                                className="relative cursor-pointer"
+                                onClick={() => document.getElementById('sleep-date-input').showPicker()}
+                            >
+                                <input
+                                    id="sleep-date-input"
+                                    type="date"
+                                    required
+                                    value={selectedDate}
+                                    onChange={(e) => setSelectedDate(e.target.value)}
+                                    className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-1 transition-all [color-scheme:dark] cursor-pointer [&::-webkit-calendar-picker-indicator]:hidden"
+                                    style={{ '--tw-ring-color': NEON_YELLOW, '--tw-border-opacity': 1 }}
+                                    onFocus={(e) => e.target.style.borderColor = NEON_YELLOW}
+                                    onBlur={(e) => e.target.style.borderColor = ''}
+                                />
+                                <Calendar className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-500 pointer-events-none" size={18} />
+                            </div>
+                        </div>
+
+                        <div className="space-y-2">
+                            <label className="text-xs uppercase font-bold text-zinc-500 tracking-wider ml-1">Hours Slept</label>
+                            <div className="relative">
+                                <input
+                                    type="number"
+                                    step="0.1"
+                                    min="0"
+                                    max="24"
+                                    required
+                                    placeholder="e.g. 7.5"
+                                    value={hoursSlept}
+                                    onChange={(e) => setHoursSlept(e.target.value)}
+                                    className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-1 transition-all"
+                                    style={{ '--tw-ring-color': NEON_YELLOW }}
+                                    onFocus={(e) => e.target.style.borderColor = NEON_YELLOW}
+                                    onBlur={(e) => e.target.style.borderColor = ''}
+                                />
+                                <Clock className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-500 pointer-events-none" size={18} />
+                            </div>
+                        </div>
+
+                        <div className="flex gap-3 pt-4">
+                            <button
+                                type="button"
+                                onClick={() => setIsModalOpen(false)}
+                                className="flex-1 px-4 py-3 rounded-xl border border-zinc-800 text-zinc-400 font-medium hover:bg-white/5 transition-colors"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="submit"
+                                className="flex-1 px-4 py-3 rounded-xl text-black font-bold hover:opacity-90 transition-opacity shadow-lg"
+                                style={{ backgroundColor: NEON_YELLOW, boxShadow: `0 4px 20px ${NEON_YELLOW}40` }}
+                            >
+                                Save Log
+                            </button>
+                        </div>
+                    </form>
+                </Modal>
+
             </div>
-
-            {/* Log Modal */}
-            <Modal
-                isOpen={isModalOpen}
-                onClose={() => setIsModalOpen(false)}
-                title="Log Sleep Session"
-            >
-                <form onSubmit={handleSave} className="space-y-6">
-                    <div className="space-y-2">
-                        <label className="text-xs uppercase font-bold text-zinc-500 tracking-wider ml-1">Date</label>
-                        <div
-                            className="relative cursor-pointer"
-                            onClick={() => document.getElementById('sleep-date-input').showPicker()}
-                        >
-                            <input
-                                id="sleep-date-input"
-                                type="date"
-                                required
-                                value={selectedDate}
-                                onChange={(e) => setSelectedDate(e.target.value)}
-                                className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-1 transition-all [color-scheme:dark] cursor-pointer [&::-webkit-calendar-picker-indicator]:hidden"
-                                style={{ '--tw-ring-color': NEON_YELLOW, '--tw-border-opacity': 1 }}
-                                onFocus={(e) => e.target.style.borderColor = NEON_YELLOW}
-                                onBlur={(e) => e.target.style.borderColor = ''}
-                            />
-                            <Calendar className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-500 pointer-events-none" size={18} />
-                        </div>
-                    </div>
-
-                    <div className="space-y-2">
-                        <label className="text-xs uppercase font-bold text-zinc-500 tracking-wider ml-1">Hours Slept</label>
-                        <div className="relative">
-                            <input
-                                type="number"
-                                step="0.1"
-                                min="0"
-                                max="24"
-                                required
-                                placeholder="e.g. 7.5"
-                                value={hoursSlept}
-                                onChange={(e) => setHoursSlept(e.target.value)}
-                                className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-1 transition-all"
-                                style={{ '--tw-ring-color': NEON_YELLOW }}
-                                onFocus={(e) => e.target.style.borderColor = NEON_YELLOW}
-                                onBlur={(e) => e.target.style.borderColor = ''}
-                            />
-                            <Clock className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-500 pointer-events-none" size={18} />
-                        </div>
-                    </div>
-
-                    <div className="flex gap-3 pt-4">
-                        <button
-                            type="button"
-                            onClick={() => setIsModalOpen(false)}
-                            className="flex-1 px-4 py-3 rounded-xl border border-zinc-800 text-zinc-400 font-medium hover:bg-white/5 transition-colors"
-                        >
-                            Cancel
-                        </button>
-                        <button
-                            type="submit"
-                            className="flex-1 px-4 py-3 rounded-xl text-black font-bold hover:opacity-90 transition-opacity shadow-lg"
-                            style={{ backgroundColor: NEON_YELLOW, boxShadow: `0 4px 20px ${NEON_YELLOW}40` }}
-                        >
-                            Save Log
-                        </button>
-                    </div>
-                </form>
-            </Modal>
-
-        </div>
+        </>
     );
 }

@@ -1,0 +1,13 @@
+User-agent: *
+Allow: /
+Disallow: /goals
+Disallow: /habits
+Disallow: /todo
+Disallow: /sleep
+Disallow: /journal
+Disallow: /calendar
+Disallow: /rewards
+Disallow: /settings
+
+# Sitemap location
+Sitemap: https://zency-flow.web.app/sitemap.xml

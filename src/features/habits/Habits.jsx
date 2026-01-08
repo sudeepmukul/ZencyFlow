@@ -5,6 +5,7 @@ import { Plus, Zap, ShoppingBag, Calendar } from 'lucide-react';
 import { HabitCard } from './components/HabitCard';
 import { HabitHeatMap } from './components/HabitHeatMap';
 import { AddHabitModal } from './components/AddHabitModal';
+import { SEOHead } from '../../components/seo/SEOHead';
 
 export function Habits() {
     const { habits, addHabit, updateHabit, deleteHabit, toggleHabit, habitLogs } = useData();
@@ -116,83 +117,90 @@ export function Habits() {
     };
 
     return (
-        <div className="min-h-screen bg-transparent p-6 font-sans text-gray-100 selection:bg-[#FBFF00] selection:text-black md:p-12 pb-24">
-
-            <AddHabitModal
-                isOpen={isModalOpen}
-                onClose={() => setIsModalOpen(false)}
-                onAdd={handleSaveHabit}
-                initialData={editingHabit}
+        <>
+            <SEOHead
+                title="Habits"
+                description="Build lasting habits with streak tracking, weekly progress, and visual heatmaps."
+                path="/habits"
             />
+            <div className="min-h-screen bg-transparent p-6 font-sans text-gray-100 selection:bg-[#FBFF00] selection:text-black md:p-12 pb-24">
 
-            <div className="mx-auto max-w-4xl space-y-8">
-                <header className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
-                    <div>
-                        <h1 className="text-4xl md:text-5xl font-bold bg-gradient-to-r from-white via-white to-zinc-500 bg-clip-text text-transparent tracking-tight">
-                            Habit Tracker
-                            <span className="ml-2 inline-block h-2 w-2 rounded-full bg-[#FBFF00] align-baseline shadow-[0_0_10px_#FBFF00]"></span>
-                        </h1>
-                        <p className="mt-2 text-gray-400">
-                            XP: <span className="font-bold text-[#FBFF00]">{user.xp || 0}</span>
-                        </p>
-                    </div>
+                <AddHabitModal
+                    isOpen={isModalOpen}
+                    onClose={() => setIsModalOpen(false)}
+                    onAdd={handleSaveHabit}
+                    initialData={editingHabit}
+                />
 
-                    <div className="flex items-center gap-4">
-                        <button
-                            onClick={handleBuyFreeze}
-                            className="group flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-semibold text-gray-300 transition-all hover:border-[#FBFF00]/50 hover:bg-[#FBFF00]/10 hover:text-[#FBFF00]"
-                        >
-                            <div className="flex flex-col items-start leading-none">
-                                <span className="text-[10px] uppercase text-gray-500 group-hover:text-[#FBFF00]/70">Cost: 50XP</span>
-                                <span className="flex items-center gap-1">
-                                    <Zap size={14} className="fill-[#FBFF00] text-[#FBFF00]" />
-                                    {user.inventory?.streak_freeze || 0} Freezes
-                                </span>
-                            </div>
-                            <ShoppingBag size={16} className="ml-2 opacity-50 group-hover:opacity-100" />
-                        </button>
+                <div className="mx-auto max-w-4xl space-y-8">
+                    <header className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
+                        <div>
+                            <h1 className="text-4xl md:text-5xl font-bold bg-gradient-to-r from-white via-white to-zinc-500 bg-clip-text text-transparent tracking-tight">
+                                Habit Tracker
+                                <span className="ml-2 inline-block h-2 w-2 rounded-full bg-[#FBFF00] align-baseline shadow-[0_0_10px_#FBFF00]"></span>
+                            </h1>
+                            <p className="mt-2 text-gray-400">
+                                XP: <span className="font-bold text-[#FBFF00]">{user.xp || 0}</span>
+                            </p>
+                        </div>
 
-                        <button
-                            onClick={openNewHabitModal}
-                            className="group flex items-center gap-2 rounded-full bg-[#FBFF00] px-6 py-2.5 text-sm font-bold text-black shadow-[0_0_20px_rgba(251,255,0,0.3)] transition-all hover:bg-[#e1e600] hover:shadow-[0_0_30px_rgba(251,255,0,0.5)] hover:scale-105 active:scale-95"
-                        >
-                            <Plus size={18} strokeWidth={3} />
-                            New Habit
-                        </button>
-                    </div>
-                </header>
+                        <div className="flex items-center gap-4">
+                            <button
+                                onClick={handleBuyFreeze}
+                                className="group flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-semibold text-gray-300 transition-all hover:border-[#FBFF00]/50 hover:bg-[#FBFF00]/10 hover:text-[#FBFF00]"
+                            >
+                                <div className="flex flex-col items-start leading-none">
+                                    <span className="text-[10px] uppercase text-gray-500 group-hover:text-[#FBFF00]/70">Cost: 50XP</span>
+                                    <span className="flex items-center gap-1">
+                                        <Zap size={14} className="fill-[#FBFF00] text-[#FBFF00]" />
+                                        {user.inventory?.streak_freeze || 0} Freezes
+                                    </span>
+                                </div>
+                                <ShoppingBag size={16} className="ml-2 opacity-50 group-hover:opacity-100" />
+                            </button>
 
-                {/* Global Contribution Heatmap */}
-                <HabitHeatMap habits={processedHabits} />
+                            <button
+                                onClick={openNewHabitModal}
+                                className="group flex items-center gap-2 rounded-full bg-[#FBFF00] px-6 py-2.5 text-sm font-bold text-black shadow-[0_0_20px_rgba(251,255,0,0.3)] transition-all hover:bg-[#e1e600] hover:shadow-[0_0_30px_rgba(251,255,0,0.5)] hover:scale-105 active:scale-95"
+                            >
+                                <Plus size={18} strokeWidth={3} />
+                                New Habit
+                            </button>
+                        </div>
+                    </header>
 
-                <section className="space-y-6">
-                    <div className="flex items-center gap-2 text-lg font-bold text-white">
-                        <Calendar size={20} className="text-[#FBFF00]" />
-                        <h2>Active Habits</h2>
-                    </div>
+                    {/* Global Contribution Heatmap */}
+                    <HabitHeatMap habits={processedHabits} />
 
-                    <div className="space-y-6">
-                        {processedHabits.map(habit => (
-                            <HabitCard
-                                key={habit.id}
-                                habit={habit}
-                                onToggle={handleToggle}
-                                onDelete={() => deleteHabit(habit.id)}
-                                onEdit={() => {
-                                    setEditingHabit(habit);
-                                    setIsModalOpen(true);
-                                }}
-                            />
-                        ))}
-                        {processedHabits.length === 0 && (
-                            <div className="text-center py-12 text-zinc-500 bg-zinc-900/30 rounded-3xl border border-zinc-800 border-dashed">
-                                <p>No habits yet. Start building your legacy!</p>
-                            </div>
-                        )}
-                    </div>
-                </section>
+                    <section className="space-y-6">
+                        <div className="flex items-center gap-2 text-lg font-bold text-white">
+                            <Calendar size={20} className="text-[#FBFF00]" />
+                            <h2>Active Habits</h2>
+                        </div>
 
+                        <div className="space-y-6">
+                            {processedHabits.map(habit => (
+                                <HabitCard
+                                    key={habit.id}
+                                    habit={habit}
+                                    onToggle={handleToggle}
+                                    onDelete={() => deleteHabit(habit.id)}
+                                    onEdit={() => {
+                                        setEditingHabit(habit);
+                                        setIsModalOpen(true);
+                                    }}
+                                />
+                            ))}
+                            {processedHabits.length === 0 && (
+                                <div className="text-center py-12 text-zinc-500 bg-zinc-900/30 rounded-3xl border border-zinc-800 border-dashed">
+                                    <p>No habits yet. Start building your legacy!</p>
+                                </div>
+                            )}
+                        </div>
+                    </section>
+
+                </div>
             </div>
-        </div>
+        </>
     );
 }

@@ -48,14 +48,51 @@ export const UserProvider = ({ children }) => {
                                     const cloudTime = new Date(cloudData.updatedAt || 0).getTime();
                                     const localTime = new Date(userData.updatedAt || 0).getTime();
 
+                                    // PROTECT XP: Always keep the higher XP/Level to prevent accidental overwrites from new devices
+                                    // This implements a "Max Progress Wins" strategy for XP, Level, and Badges
+                                    const cloudXP = cloudData.xp || 0;
+                                    const localXP = userData.xp || 0;
+                                    const bestXP = Math.max(cloudXP, localXP);
+
+                                    // Calculate level for the best XP
+                                    // Use calculateLevel from outer scope
+                                    const bestLevel = calculateLevel(bestXP);
+
+                                    // Merge Badges (Union of both sets)
+                                    const cloudBadges = new Set(cloudData.badges || []);
+                                    const localBadges = new Set(userData.badges || []);
+                                    const mergedBadges = [...new Set([...cloudBadges, ...localBadges])];
+
                                     if (cloudTime > localTime) {
-                                        console.log('[Profile Sync] Cloud is newer, updating local.');
-                                        finalUser = { ...userData, ...cloudData };
+                                        console.log('[Profile Sync] Cloud is newer, updating local (preserving max progress).');
+                                        finalUser = {
+                                            ...userData,
+                                            ...cloudData,
+                                            xp: bestXP,
+                                            level: bestLevel,
+                                            badges: mergedBadges
+                                        };
                                         await db.put('user', finalUser);
                                     } else if (localTime > cloudTime) {
-                                        // Local is newer (offline changes?), push to cloud
+                                        // Local is newer, push to cloud but also respect cloud's potentially higher stats if any (rare)
                                         console.log('[Profile Sync] Local is newer, pushing to cloud.');
-                                        await setDoc(userDocRef, userData, { merge: true });
+                                        const mergedToPush = {
+                                            ...userData,
+                                            xp: bestXP,
+                                            level: bestLevel,
+                                            badges: mergedBadges
+                                        };
+                                        await setDoc(userDocRef, mergedToPush, { merge: true });
+
+                                        // Update local to match the merged result
+                                        finalUser = mergedToPush;
+                                        await db.put('user', finalUser);
+                                    } else {
+                                        // Timestamps equal, but ensure we have best stats
+                                        if (localXP < bestXP) {
+                                            finalUser = { ...userData, xp: bestXP, level: bestLevel, badges: mergedBadges };
+                                            await db.put('user', finalUser);
+                                        }
                                     }
                                 } else {
                                     // First time valid login but no cloud data? Push local.
@@ -255,9 +292,64 @@ export const UserProvider = ({ children }) => {
         return false;
     };
 
+    const recalculateXP = async () => {
+        try {
+            console.log("Recalculating XP from history...");
+            // Don't set global loading as it might flicker UI, just toast
+            addToast("Restoring...", "Recalculating XP from history", "info");
+
+            // 1. Fetch all data
+            const tasks = await db.getAll('tasks');
+            const habitLogs = await db.getAll('habit_logs');
+            const journalEntries = await db.getAll('journal_entries');
+            const sleepLogs = await db.getAll('sleep_logs');
+            const rewardHistory = await db.getAll('reward_history');
+
+            let totalEarned = 0;
+
+            // 2. XP from Tasks
+            tasks.forEach(t => {
+                if (t.status === 'completed') {
+                    totalEarned += (t.xpValue || 20);
+                }
+            });
+
+            // 3. XP from Habits (Approximate 10 XP per log)
+            totalEarned += (habitLogs.length * 10);
+
+            // 4. XP from Journal
+            totalEarned += (journalEntries.length * 15);
+
+            // 5. XP from Sleep
+            totalEarned += (sleepLogs.length * 15);
+
+            // 6. Subtract Spent XP
+            let totalSpent = 0;
+            rewardHistory.forEach(r => {
+                totalSpent += (r.cost || 0);
+            });
+
+            const netXP = Math.max(0, totalEarned - totalSpent);
+            // actually calculateLevel was defined in component scope line 19. It IS available here.
+
+            const newLevel = calculateLevel(netXP);
+
+            console.log(`Recalculation Result: Earned ${totalEarned}, Spent ${totalSpent}, Net ${netXP}, Level ${newLevel}`);
+
+            await updateProfile({ xp: netXP, level: newLevel });
+            addToast("XP Restored 🔄", `Recalculated: Level ${newLevel} (${netXP} XP)`, "success");
+
+            return { xp: netXP, level: newLevel };
+        } catch (err) {
+            console.error("Failed to recalculate XP", err);
+            addToast("Error", "Failed to recalculate XP", "error");
+        }
+    };
+
     const value = {
         user,
         addXP,
+        recalculateXP, // Export this
         updateProfile,
         levelProgress: calculateProgress(user.xp, user.level),
         nextLevelXP: calculateNextLevelXP(user.level),

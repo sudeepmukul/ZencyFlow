@@ -174,7 +174,7 @@ export function CategoryManagerModal({ isOpen, onClose, tasks }) {
                                         {catData.icon}
                                     </div>
                                 )}
-                                <h1 className="text-3xl font-bold text-white mb-2">{selectedCategory}</h1>
+                                <h2 className="text-3xl font-bold text-white mb-2">{selectedCategory}</h2>
                                 <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-[#fbff00]/10 border border-[#fbff00]/30">
                                     <Sparkles className="w-4 h-4" style={{ color: NEON_YELLOW }} />
                                     <span className="font-bold" style={{ color: NEON_YELLOW }}>
@@ -227,7 +227,7 @@ export function CategoryManagerModal({ isOpen, onClose, tasks }) {
                 <div className="sticky top-0 z-10 bg-black/80 backdrop-blur-md border-b border-white/5 p-4 md:px-8">
                     <div className="max-w-5xl mx-auto flex items-center justify-between">
                         <div>
-                            <h1 className="text-2xl md:text-3xl font-bold text-white">Categories</h1>
+                            <h2 className="text-2xl md:text-3xl font-bold text-white">Categories</h2>
                             <p className="text-zinc-400 text-xs md:text-sm">Manage categories & view XP</p>
                         </div>
                         <div className="flex items-center gap-3">

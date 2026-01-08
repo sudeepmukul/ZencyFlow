@@ -7,7 +7,7 @@ const HOUR_HEIGHT = 60 * PIXELS_PER_MINUTE;
 
 // --- COMPONENT: CalendarGrid ---
 // Represents a single day column. Handles dropping events and clicking to create new ones.
-export const CalendarGrid = ({ date, currentTime, events, tasks, reminders, filters, categoryColors, onSlotClick, onDragStart, onDropEvent, onEventClick }) => {
+export const CalendarGrid = ({ date, currentTime, events, tasks, reminders, filters, categoryColors, onSlotClick, onDragStart, onDropEvent, onEventClick, onEventDoubleClick }) => {
     const dayStart = startOfDay(date);
     const isToday = currentTime && isSameDay(date, currentTime);
     const currentMinutes = isToday ? differenceInMinutes(currentTime, dayStart) : 0;
@@ -34,20 +34,60 @@ export const CalendarGrid = ({ date, currentTime, events, tasks, reminders, filt
                 if (isNaN(taskDate.getTime())) return;
             } catch (e) { return; }
 
-            // Check if this task belongs to this day
-            if (!isSameDay(taskDate, date)) return;
+            // Get day name for repeat matching (Mon, Tue, Wed, Thu, Fri, Sat, Sun)
+            const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+            const currentDayName = dayNames[date.getDay()];
+            const currentDateKey = format(date, 'yyyy-MM-dd');
+
+            // Check if this date is excluded from repeat
+            const isExcluded = task.repeatExclusions &&
+                Array.isArray(task.repeatExclusions) &&
+                task.repeatExclusions.includes(currentDateKey);
+
+            // Check if this task belongs to this day:
+            // 1. Original due date matches
+            // 2. OR task has repeat enabled and current day is in repeatDays (and not excluded)
+            const isOriginalDay = isSameDay(taskDate, date);
+            const isRepeatDay = task.repeatEnabled &&
+                Array.isArray(task.repeatDays) &&
+                task.repeatDays.includes(currentDayName) &&
+                !isExcluded; // Skip if this date is excluded
+
+            if (!isOriginalDay && !isRepeatDay) return;
 
             // Determine start time
             // If dueDate is date-only (2026-01-04) without time, default to 9 AM for visibility
             const isDayOnly = typeof task.dueDate === 'string' && task.dueDate.length <= 10;
-            let startTime = taskDate;
-            if (isDayOnly || (taskDate.getHours() === 0 && taskDate.getMinutes() === 0)) {
-                // Default to 9 AM for all-day or date-only tasks
-                startTime = setHours(startOfDay(date), 9);
+            let startTime;
+
+            if (isOriginalDay) {
+                // Use the original time from dueDate
+                startTime = taskDate;
+                if (isDayOnly || (taskDate.getHours() === 0 && taskDate.getMinutes() === 0)) {
+                    startTime = setHours(startOfDay(date), 9);
+                }
+            } else {
+                // For repeat days, use the same time from original dueDate but on this date
+                const originalHours = taskDate.getHours();
+                const originalMinutes = taskDate.getMinutes();
+                startTime = startOfDay(date);
+                startTime = new Date(startTime.setHours(originalHours, originalMinutes, 0, 0));
+
+                // Default to 9 AM if original was midnight
+                if (originalHours === 0 && originalMinutes === 0) {
+                    startTime = setHours(startOfDay(date), 9);
+                }
             }
 
-            // Default to 1 hour if no endTime
-            const endTime = task.endTime ? new Date(task.endTime) : addMinutes(startTime, 60);
+            // Default to 1 hour if no endTime, or calculate same duration for repeat days
+            let endTime;
+            if (task.endTime) {
+                const originalEnd = new Date(task.endTime);
+                const durationMinutes = differenceInMinutes(originalEnd, taskDate);
+                endTime = addMinutes(startTime, durationMinutes > 0 ? durationMinutes : 60);
+            } else {
+                endTime = addMinutes(startTime, 60);
+            }
 
             // Determine Color: Use centralized color map or fallback
             const color = categoryColors && categoryColors[cat] ? categoryColors[cat] : (task.categoryColor || '#8b5cf6');
@@ -57,7 +97,8 @@ export const CalendarGrid = ({ date, currentTime, events, tasks, reminders, filt
                 isTask: true,
                 startTime,
                 endTime,
-                categoryColor: color
+                categoryColor: color,
+                isRepeatInstance: !isOriginalDay && isRepeatDay
             });
         });
 
@@ -214,6 +255,7 @@ export const CalendarGrid = ({ date, currentTime, events, tasks, reminders, filt
                             event={item}
                             onDragStart={onDragStart}
                             onClick={onEventClick}
+                            onDoubleClick={onEventDoubleClick}
                             style={{
                                 top: `${top}px`,
                                 height: `${safeHeight}px`,

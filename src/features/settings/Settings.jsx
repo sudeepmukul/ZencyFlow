@@ -7,13 +7,14 @@ import { Trash2, Download, Upload, AlertTriangle, Plus, Clock, Bell, Award, Clou
 import { useAuth } from '../../contexts/AuthContext';
 import { db as firebaseDb } from '../../lib/firebase';
 import { collection, writeBatch, doc } from 'firebase/firestore';
-import { NotificationManager } from '../../lib/notifications';
 import { Badges } from '../profile/Badges';
 import { db } from '../../lib/db';
 import { DataMigrationModal } from './DataMigrationModal';
+import { NotificationSettings } from './NotificationSettings';
+import { SEOHead } from '../../components/seo/SEOHead';
 
 export function Settings() {
-    const { user, updateProfile } = useUser();
+    const { user, updateProfile, recalculateXP } = useUser();
     const { currentUser, login, logout } = useAuth();
     const [isMigrating, setIsMigrating] = useState(false);
     const {
@@ -139,244 +140,241 @@ export function Settings() {
     };
 
     return (
-        <div className="space-y-8 max-w-4xl mx-auto">
-            <h1 className="text-4xl md:text-5xl font-bold bg-gradient-to-r from-white via-white to-zinc-500 bg-clip-text text-transparent">Settings</h1>
+        <>
+            <SEOHead
+                title="Settings"
+                description="Customize your Zency Flow experience. Manage profile, categories, timer settings, and data."
+                path="/settings"
+            />
+            <div className="space-y-8 max-w-4xl mx-auto">
+                <h1 className="text-4xl md:text-5xl font-bold bg-gradient-to-r from-white via-white to-zinc-500 bg-clip-text text-transparent">Settings</h1>
 
-            {/* Account & Cloud Sync */}
-            <Card>
-                <div className="flex items-center justify-between mb-4">
-                    <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                        <Cloud className="w-5 h-5 text-neon-400" /> Cloud Sync
-                    </h2>
-                    {currentUser && (
-                        <span className="text-sm text-green-400 font-mono bg-green-900/20 px-2 py-1 rounded">
-                            Connected: {currentUser.email}
-                        </span>
-                    )}
-                </div>
-
-                {!currentUser ? (
-                    <div className="text-center py-6">
-                        <p className="text-zinc-400 mb-4">Sign in with Google to sync your data across devices.</p>
-                        <Button variant="primary" onClick={login}>
-                            Sign in with Google
-                        </Button>
+                {/* Account & Cloud Sync */}
+                <Card>
+                    <div className="flex items-center justify-between mb-4">
+                        <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                            <Cloud className="w-5 h-5 text-neon-400" /> Cloud Sync
+                        </h2>
+                        {currentUser && (
+                            <span className="text-sm text-green-400 font-mono bg-green-900/20 px-2 py-1 rounded">
+                                Connected: {currentUser.email}
+                            </span>
+                        )}
                     </div>
-                ) : (
-                    <div className="space-y-4">
-                        <div className="p-4 bg-zinc-900/50 border border-zinc-800 rounded-lg flex items-center justify-between">
-                            <div>
-                                <h3 className="font-bold text-white flex items-center gap-2">
-                                    <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
-                                    Sync Active
-                                </h3>
-                                <p className="text-xs text-zinc-400">Your data is automatically saved to your account.</p>
+
+                    {!currentUser ? (
+                        <div className="text-center py-6">
+                            <p className="text-zinc-400 mb-4">Sign in with Google to sync your data across devices.</p>
+                            <Button variant="primary" onClick={login}>
+                                Sign in with Google
+                            </Button>
+                        </div>
+                    ) : (
+                        <div className="space-y-4">
+                            <div className="p-4 bg-zinc-900/50 border border-zinc-800 rounded-lg flex items-center justify-between">
+                                <div>
+                                    <h3 className="font-bold text-white flex items-center gap-2">
+                                        <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
+                                        Sync Active
+                                    </h3>
+                                    <p className="text-xs text-zinc-400">Your data is automatically saved to your account.</p>
+                                </div>
+                                <Button onClick={handleForceSync} disabled={isMigrating} variant="secondary" size="sm">
+                                    {isMigrating ? <Upload className="w-4 h-4 animate-bounce" /> : <Upload className="w-4 h-4" />}
+                                    {isMigrating ? 'Syncing...' : 'Force Sync Now'}
+                                </Button>
                             </div>
-                            <Button onClick={handleForceSync} disabled={isMigrating} variant="secondary" size="sm">
-                                {isMigrating ? <Upload className="w-4 h-4 animate-bounce" /> : <Upload className="w-4 h-4" />}
-                                {isMigrating ? 'Syncing...' : 'Force Sync Now'}
+
+                            <div className="flex justify-end">
+                                <Button variant="danger" onClick={logout}>Sign Out</Button>
+                            </div>
+                        </div>
+                    )}
+                </Card>
+
+                {/* Profile Settings */}
+                <Card>
+                    <h2 className="text-xl font-bold text-white mb-6">Profile</h2>
+                    <form onSubmit={handleUpdateProfile} className="flex gap-4 items-end mb-8">
+                        <div className="flex-1">
+                            <label className="block text-sm font-medium text-zinc-400 mb-1">Display Name</label>
+                            <input
+                                type="text"
+                                value={newName}
+                                onChange={(e) => setNewName(e.target.value)}
+                                className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-neon-400"
+                            />
+                        </div>
+                        <Button type="submit">Save Changes</Button>
+                    </form>
+
+                    <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                        <Award className="w-5 h-5 text-yellow-500" /> Achievements
+                    </h3>
+                    <Badges userBadges={user.badges || []} />
+                </Card>
+
+                {/* Category Management */}
+                <Card>
+                    <h2 className="text-xl font-bold text-white mb-6">Categories</h2>
+                    <div className="space-y-4">
+                        <form onSubmit={handleAddCategory} className="flex gap-4">
+                            <input
+                                type="text"
+                                value={newCategory}
+                                onChange={(e) => setNewCategory(e.target.value)}
+                                placeholder="New category name..."
+                                className="flex-1 bg-zinc-900 border border-zinc-800 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-neon-400"
+                            />
+                            <Button type="submit"><Plus className="w-4 h-4" /> Add</Button>
+                        </form>
+
+                        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                            {categories.map(cat => (
+                                <div key={cat.id} className="flex items-center justify-between p-3 bg-zinc-900 rounded-lg border border-zinc-800">
+                                    <span className="text-zinc-300">{cat.name}</span>
+                                    <button onClick={() => deleteCategory(cat.id)} className="text-zinc-500 hover:text-red-500">
+                                        <Trash2 className="w-4 h-4" />
+                                    </button>
+                                </div>
+                            ))}
+                            {categories.length === 0 && <div className="text-zinc-500 text-sm col-span-full">No custom categories added.</div>}
+                        </div>
+                    </div>
+                </Card>
+
+                {/* Data Summary */}
+                <Card>
+                    <h2 className="text-xl font-bold text-white mb-4">Data Overview</h2>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div className="p-4 bg-zinc-900 rounded-lg border border-zinc-800 text-center">
+                            <div className="text-2xl font-bold text-neon-400">{goals.length}</div>
+                            <div className="text-xs text-zinc-500 uppercase">Goals</div>
+                        </div>
+                        <div className="p-4 bg-zinc-900 rounded-lg border border-zinc-800 text-center">
+                            <div className="text-2xl font-bold text-neon-400">{habits.length}</div>
+                            <div className="text-xs text-zinc-500 uppercase">Habits</div>
+                        </div>
+                        <div className="p-4 bg-zinc-900 rounded-lg border border-zinc-800 text-center">
+                            <div className="text-2xl font-bold text-neon-400">{tasks.length}</div>
+                            <div className="text-xs text-zinc-500 uppercase">Tasks</div>
+                        </div>
+                        <div className="p-4 bg-zinc-900 rounded-lg border border-zinc-800 text-center">
+                            <div className="text-2xl font-bold text-neon-400">{journalEntries.length}</div>
+                            <div className="text-xs text-zinc-500 uppercase">Entries</div>
+                        </div>
+                    </div>
+                </Card>
+
+                {/* Timer Settings */}
+                <Card>
+                    <h2 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
+                        <Clock className="w-5 h-5 text-neon-400" /> Timer Settings
+                    </h2>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <label className="block text-sm font-medium text-zinc-400 mb-1">Efficiency Multiplier</label>
+                            <p className="text-xs text-zinc-500 mb-2">How much of your tracked time counts as "productive". (0.6 = 60%)</p>
+                            <div className="flex gap-2">
+                                {[0.5, 0.6, 0.7, 0.8, 0.9, 1.0].map(val => (
+                                    <Button
+                                        key={val}
+                                        size="sm"
+                                        variant={timerSettings?.efficiency === val ? 'primary' : 'secondary'}
+                                        onClick={() => updateTimerSettings({ efficiency: val })}
+                                    >
+                                        {val * 100}%
+                                    </Button>
+                                ))}
+                            </div>
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-medium text-zinc-400 mb-1">Check-in Interval</label>
+                            <p className="text-xs text-zinc-500 mb-2">How often to verify you are still working.</p>
+                            <div className="flex gap-2">
+                                {[15, 30, 45, 60].map(val => (
+                                    <Button
+                                        key={val}
+                                        size="sm"
+                                        variant={timerSettings?.checkInInterval === val ? 'primary' : 'secondary'}
+                                        onClick={() => updateTimerSettings({ checkInInterval: val })}
+                                    >
+                                        {val}m
+                                    </Button>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                </Card>
+
+                {/* Notification Settings */}
+                <Card>
+                    <h2 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
+                        <Bell className="w-5 h-5 text-neon-400" />
+                        Notifications
+                    </h2>
+
+                    <NotificationSettings />
+                </Card>
+                <Card>
+                    <h2 className="text-xl font-bold text-white mb-6">Data Management & Backup</h2>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                        <div className="p-4 bg-neon-400/5 rounded-lg border border-neon-400/20">
+                            <h3 className="font-bold text-white mb-1 flex items-center gap-2">
+                                <Database className="w-4 h-4 text-neon-400" />
+                                Migration Assistant
+                            </h3>
+                            <p className="text-xs text-zinc-400 mb-3">
+                                Export your data to JSON or import standard backups. Auto-merges missing data (safe import).
+                            </p>
+                            <Button onClick={() => setIsMigrationModalOpen(true)} className="w-full bg-neon-400 text-black hover:bg-neon-300">
+                                Open Migration Tool
                             </Button>
                         </div>
 
-                        <div className="flex justify-end">
-                            <Button variant="danger" onClick={logout}>Sign Out</Button>
-                        </div>
-                    </div>
-                )}
-            </Card>
-
-            {/* Profile Settings */}
-            <Card>
-                <h2 className="text-xl font-bold text-white mb-6">Profile</h2>
-                <form onSubmit={handleUpdateProfile} className="flex gap-4 items-end mb-8">
-                    <div className="flex-1">
-                        <label className="block text-sm font-medium text-zinc-400 mb-1">Display Name</label>
-                        <input
-                            type="text"
-                            value={newName}
-                            onChange={(e) => setNewName(e.target.value)}
-                            className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-neon-400"
-                        />
-                    </div>
-                    <Button type="submit">Save Changes</Button>
-                </form>
-
-                <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
-                    <Award className="w-5 h-5 text-yellow-500" /> Achievements
-                </h3>
-                <Badges userBadges={user.badges || []} />
-            </Card>
-
-            {/* Category Management */}
-            <Card>
-                <h2 className="text-xl font-bold text-white mb-6">Categories</h2>
-                <div className="space-y-4">
-                    <form onSubmit={handleAddCategory} className="flex gap-4">
-                        <input
-                            type="text"
-                            value={newCategory}
-                            onChange={(e) => setNewCategory(e.target.value)}
-                            placeholder="New category name..."
-                            className="flex-1 bg-zinc-900 border border-zinc-800 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-neon-400"
-                        />
-                        <Button type="submit"><Plus className="w-4 h-4" /> Add</Button>
-                    </form>
-
-                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                        {categories.map(cat => (
-                            <div key={cat.id} className="flex items-center justify-between p-3 bg-zinc-900 rounded-lg border border-zinc-800">
-                                <span className="text-zinc-300">{cat.name}</span>
-                                <button onClick={() => deleteCategory(cat.id)} className="text-zinc-500 hover:text-red-500">
-                                    <Trash2 className="w-4 h-4" />
-                                </button>
-                            </div>
-                        ))}
-                        {categories.length === 0 && <div className="text-zinc-500 text-sm col-span-full">No custom categories added.</div>}
-                    </div>
-                </div>
-            </Card>
-
-            {/* Data Summary */}
-            <Card>
-                <h2 className="text-xl font-bold text-white mb-4">Data Overview</h2>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <div className="p-4 bg-zinc-900 rounded-lg border border-zinc-800 text-center">
-                        <div className="text-2xl font-bold text-neon-400">{goals.length}</div>
-                        <div className="text-xs text-zinc-500 uppercase">Goals</div>
-                    </div>
-                    <div className="p-4 bg-zinc-900 rounded-lg border border-zinc-800 text-center">
-                        <div className="text-2xl font-bold text-neon-400">{habits.length}</div>
-                        <div className="text-xs text-zinc-500 uppercase">Habits</div>
-                    </div>
-                    <div className="p-4 bg-zinc-900 rounded-lg border border-zinc-800 text-center">
-                        <div className="text-2xl font-bold text-neon-400">{tasks.length}</div>
-                        <div className="text-xs text-zinc-500 uppercase">Tasks</div>
-                    </div>
-                    <div className="p-4 bg-zinc-900 rounded-lg border border-zinc-800 text-center">
-                        <div className="text-2xl font-bold text-neon-400">{journalEntries.length}</div>
-                        <div className="text-xs text-zinc-500 uppercase">Entries</div>
-                    </div>
-                </div>
-            </Card>
-
-            {/* Timer Settings */}
-            <Card>
-                <h2 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
-                    <Clock className="w-5 h-5 text-neon-400" /> Timer Settings
-                </h2>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div>
-                        <label className="block text-sm font-medium text-zinc-400 mb-1">Efficiency Multiplier</label>
-                        <p className="text-xs text-zinc-500 mb-2">How much of your tracked time counts as "productive". (0.6 = 60%)</p>
-                        <div className="flex gap-2">
-                            {[0.5, 0.6, 0.7, 0.8, 0.9, 1.0].map(val => (
-                                <Button
-                                    key={val}
-                                    size="sm"
-                                    variant={timerSettings?.efficiency === val ? 'primary' : 'secondary'}
-                                    onClick={() => updateTimerSettings({ efficiency: val })}
-                                >
-                                    {val * 100}%
-                                </Button>
-                            ))}
+                        <div className="p-4 bg-blue-500/10 rounded-lg border border-blue-500/30">
+                            <h3 className="font-bold text-white flex items-center gap-2 mb-1">
+                                📦 Monthly Archive
+                            </h3>
+                            <p className="text-xs text-zinc-400 mb-3">Export & reset tasks/history for new month.</p>
+                            <Button onClick={handleMonthlyArchive} variant="primary" className="w-full">
+                                Archive & Reset
+                            </Button>
                         </div>
                     </div>
 
-                    <div>
-                        <label className="block text-sm font-medium text-zinc-400 mb-1">Check-in Interval</label>
-                        <p className="text-xs text-zinc-500 mb-2">How often to verify you are still working.</p>
-                        <div className="flex gap-2">
-                            {[15, 30, 45, 60].map(val => (
-                                <Button
-                                    key={val}
-                                    size="sm"
-                                    variant={timerSettings?.checkInInterval === val ? 'primary' : 'secondary'}
-                                    onClick={() => updateTimerSettings({ checkInInterval: val })}
-                                >
-                                    {val}m
-                                </Button>
-                            ))}
+                    <div className="flex items-center justify-between p-4 bg-yellow-500/10 rounded-lg border border-yellow-500/30 mb-6">
+                        <div>
+                            <h3 className="font-bold text-yellow-500 flex items-center gap-2">
+                                ⚡ Data Recovery
+                            </h3>
+                            <p className="text-sm text-yellow-400/70">Lost your XP? Recalculate it from your completed history.</p>
                         </div>
-                    </div>
-                </div>
-            </Card>
-
-            {/* Notification Settings */}
-            <Card>
-                <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
-                    <Bell className="w-5 h-5 text-neon-400" />
-                    Notifications
-                </h2>
-                <div className="flex items-center justify-between">
-                    <div>
-                        <h3 className="font-medium text-white">Browser Notifications</h3>
-                        <p className="text-sm text-zinc-400">Get reminders for habits and streaks.</p>
-                    </div>
-                    <Button
-                        variant="primary"
-                        onClick={async () => {
-                            const granted = await NotificationManager.requestPermission();
-                            if (granted) {
-                                new Notification("Notifications Enabled! 🔔", {
-                                    body: "You'll now receive reminders to stay on track.",
-                                    icon: '/vite.svg'
-                                });
-                            } else {
-                                alert("Please enable notifications in your browser settings.");
-                            }
-                        }}
-                    >
-                        Enable Notifications
-                    </Button>
-                </div>
-            </Card>
-
-            {/* Data Management */}
-            <Card>
-                <h2 className="text-xl font-bold text-white mb-6">Data Management & Backup</h2>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                    <div className="p-4 bg-neon-400/5 rounded-lg border border-neon-400/20">
-                        <h3 className="font-bold text-white mb-1 flex items-center gap-2">
-                            <Database className="w-4 h-4 text-neon-400" />
-                            Migration Assistant
-                        </h3>
-                        <p className="text-xs text-zinc-400 mb-3">
-                            Export your data to JSON or import standard backups. Auto-merges missing data (safe import).
-                        </p>
-                        <Button onClick={() => setIsMigrationModalOpen(true)} className="w-full bg-neon-400 text-black hover:bg-neon-300">
-                            Open Migration Tool
+                        <Button variant="secondary" onClick={() => recalculateXP()}>
+                            Recalculate XP
                         </Button>
                     </div>
 
-                    <div className="p-4 bg-blue-500/10 rounded-lg border border-blue-500/30">
-                        <h3 className="font-bold text-white flex items-center gap-2 mb-1">
-                            📦 Monthly Archive
-                        </h3>
-                        <p className="text-xs text-zinc-400 mb-3">Export & reset tasks/history for new month.</p>
-                        <Button onClick={handleMonthlyArchive} variant="primary" className="w-full">
-                            Archive & Reset
+                    <div className="flex items-center justify-between p-4 bg-red-500/5 rounded-lg border border-red-500/20">
+                        <div>
+                            <h3 className="font-bold text-red-500 flex items-center gap-2">
+                                <AlertTriangle className="w-4 h-4" /> Danger Zone
+                            </h3>
+                            <p className="text-sm text-red-400/70">Permanently delete all your data and reset the app.</p>
+                        </div>
+                        <Button variant="danger" onClick={handleClearAll}>
+                            <Trash2 className="w-4 h-4" /> Clear All
                         </Button>
                     </div>
-                </div>
+                </Card>
 
-                <div className="flex items-center justify-between p-4 bg-red-500/5 rounded-lg border border-red-500/20">
-                    <div>
-                        <h3 className="font-bold text-red-500 flex items-center gap-2">
-                            <AlertTriangle className="w-4 h-4" /> Danger Zone
-                        </h3>
-                        <p className="text-sm text-red-400/70">Permanently delete all your data and reset the app.</p>
-                    </div>
-                    <Button variant="danger" onClick={handleClearAll}>
-                        <Trash2 className="w-4 h-4" /> Clear All
-                    </Button>
-                </div>
-            </Card>
-
-            <DataMigrationModal
-                isOpen={isMigrationModalOpen}
-                onClose={() => setIsMigrationModalOpen(false)}
-            />
-        </div>
+                <DataMigrationModal
+                    isOpen={isMigrationModalOpen}
+                    onClose={() => setIsMigrationModalOpen(false)}
+                />
+            </div>
+        </>
     );
 }

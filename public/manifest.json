@@ -1,0 +1,25 @@
+{
+    "name": "Zency Flow",
+    "short_name": "ZencyFlow",
+    "description": "Your personal productivity companion for goals, habits, sleep tracking, journaling, and rewards. Built by Sudeep Mukul at Zency Studios.",
+    "start_url": "/",
+    "display": "standalone",
+    "background_color": "#1a1a1a",
+    "theme_color": "#FFFF00",
+    "orientation": "portrait-primary",
+    "icons": [
+        {
+            "src": "/favicon.svg",
+            "sizes": "any",
+            "type": "image/svg+xml",
+            "purpose": "any maskable"
+        }
+    ],
+    "categories": [
+        "productivity",
+        "lifestyle",
+        "utilities"
+    ],
+    "lang": "en",
+    "dir": "ltr"
+}
