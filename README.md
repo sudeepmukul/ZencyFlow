@@ -4,9 +4,6 @@
 
 > **Now with Cloud Sync!** seamlessly switch between your laptop and phone while keeping your data in sync using Google Authentication.
 
-![ZencyFlow Dashboard](public/screenshot.png) 
-*(Note: Add a screenshot here locally if you have one)*
-
 ---
 
 ## 🚀 Key Features
