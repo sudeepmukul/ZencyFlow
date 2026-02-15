@@ -1,9 +1,10 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { db } from '../lib/db';
 import { db as firestore } from '../lib/firebase';
-import { doc, setDoc, deleteDoc, collection, getDocs, writeBatch } from 'firebase/firestore';
+import { doc, setDoc, deleteDoc, collection, getDocs, writeBatch, onSnapshot } from 'firebase/firestore';
 import { useAuth } from './AuthContext';
 import { useUser } from './UserContext';
+import { TASK_PENALTIES } from '../lib/penaltyConfig';
 
 // Track stopped timer IDs to prevent duplicate stops
 const stoppedTimerIds = new Set();
@@ -11,7 +12,7 @@ const stoppedTimerIds = new Set();
 const DataContext = createContext();
 
 export const DataProvider = ({ children }) => {
-    const { user, addXP, updateProfile, checkAchievements } = useUser();
+    const { user, addXP, addHearts, updateProfile, checkAchievements } = useUser();
     const { currentUser } = useAuth();
     const [goals, setGoals] = useState([]);
     const [habits, setHabits] = useState([]);
@@ -26,6 +27,21 @@ export const DataProvider = ({ children }) => {
     const [calendarLayers, setCalendarLayers] = useState([]);
     const [rewards, setRewards] = useState([]);
     const [rewardHistory, setRewardHistory] = useState([]);
+    const [activityLogs, setActivityLogs] = useState([]);
+    const [syncStatus, setSyncStatus] = useState('offline'); // 'offline' | 'syncing' | 'synced'
+
+    // Activity Log Helper
+    const addActivityLog = async (logEntry) => {
+        const entry = {
+            ...logEntry,
+            id: crypto.randomUUID(),
+            timestamp: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+        };
+        await db.add('activity_logs', entry);
+        await syncItem('activity_logs', entry);
+        setActivityLogs(prev => [entry, ...prev]);
+    };
 
     const refreshData = useCallback(async () => {
         try {
@@ -162,6 +178,11 @@ export const DataProvider = ({ children }) => {
 
             const fetchedTimerLogs = await db.getAll('timer_logs');
             setTimerLogs(fetchedTimerLogs || []);
+
+            try {
+                const fetchedActivityLogs = await db.getAll('activity_logs');
+                setActivityLogs((fetchedActivityLogs || []).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)));
+            } catch (e) { setActivityLogs([]); }
         } catch (error) {
             console.error("Failed to refresh data:", error);
         }
@@ -190,18 +211,45 @@ export const DataProvider = ({ children }) => {
         }
     };
 
-    // Pull from cloud on login
+    // Real-time sync from cloud using onSnapshot listeners
     useEffect(() => {
-        if (!currentUser) return;
+        if (!currentUser) {
+            setSyncStatus('offline');
+            return;
+        }
 
-        const pullFromCloud = async () => {
-            console.log('[Sync] Pulling from Cloud for user:', currentUser.uid);
+        console.log('[Sync] Setting up real-time listeners for user:', currentUser.uid);
+        setSyncStatus('syncing');
+
+        const collectionsToSync = [
+            'goals', 'habits', 'tasks', 'reminders', 'categories', 'rewards', 'reward_history',
+            'sleep_logs', 'journal_entries', 'habit_logs', 'timer_logs', 'calendar_events', 'calendar_layers',
+            'activity_logs'
+        ];
+
+        // Map collection names to state setters
+        const stateSetters = {
+            goals: setGoals,
+            habits: setHabits,
+            tasks: setTasks,
+            reminders: setReminders,
+            categories: setCategories,
+            rewards: setRewards,
+            reward_history: setRewardHistory,
+            sleep_logs: setSleepLogs,
+            journal_entries: setJournalEntries,
+            habit_logs: setHabitLogs,
+            timer_logs: setTimerLogs,
+            calendar_events: setCalendarEvents,
+            calendar_layers: setCalendarLayers,
+            activity_logs: setActivityLogs
+        };
+
+        const unsubscribers = [];
+
+        // Initial pull to populate local IndexedDB
+        const initialPull = async () => {
             try {
-                const collectionsToSync = [
-                    'goals', 'habits', 'tasks', 'reminders', 'categories', 'rewards', 'reward_history',
-                    'sleep_logs', 'journal_entries', 'habit_logs', 'timer_logs', 'calendar_events', 'calendar_layers'
-                ];
-
                 for (const colName of collectionsToSync) {
                     const querySnapshot = await getDocs(collection(firestore, 'users', currentUser.uid, colName));
                     const cloudItems = [];
@@ -215,8 +263,6 @@ export const DataProvider = ({ children }) => {
                     const localItems = await db.getAll(colName);
 
                     for (const cloudItem of cloudItems) {
-                        // Sleep logs use 'date' as ID, others use 'id'
-                        const itemKey = colName === 'sleep_logs' ? cloudItem.date : cloudItem.id;
                         const localItem = localItems.find(i => {
                             if (colName === 'sleep_logs') {
                                 return i.date === cloudItem.date;
@@ -241,13 +287,67 @@ export const DataProvider = ({ children }) => {
                     }
                 }
                 await refreshData();
-                console.log('[Sync] Pull complete');
+                console.log('[Sync] Initial pull complete');
             } catch (error) {
-                console.error('[Sync] Pull failed:', error);
+                console.error('[Sync] Initial pull failed:', error);
             }
         };
 
-        pullFromCloud();
+        initialPull();
+
+        // Set up real-time listeners for each collection
+        for (const colName of collectionsToSync) {
+            const colRef = collection(firestore, 'users', currentUser.uid, colName);
+
+            const unsub = onSnapshot(colRef, async (snapshot) => {
+                if (snapshot.metadata.hasPendingWrites) {
+                    // Local write, ignore to avoid loops
+                    return;
+                }
+
+                console.log(`[Sync] Real-time update for ${colName}: ${snapshot.docChanges().length} changes`);
+
+                const changes = snapshot.docChanges();
+                if (changes.length === 0) return;
+
+                for (const change of changes) {
+                    const item = change.doc.data();
+
+                    if (change.type === 'added' || change.type === 'modified') {
+                        // Save to local IndexedDB
+                        await db.put(colName, item);
+                    } else if (change.type === 'removed') {
+                        // Delete from local IndexedDB
+                        const itemKey = colName === 'sleep_logs' ? item.date : item.id;
+                        if (itemKey) {
+                            await db.delete(colName, itemKey);
+                        }
+                    }
+                }
+
+                // Refresh state from local DB after updates
+                const updatedItems = await db.getAll(colName);
+                const setter = stateSetters[colName];
+                if (setter) {
+                    setter(updatedItems || []);
+                }
+
+                setSyncStatus('synced');
+            }, (error) => {
+                console.error(`[Sync] Listener error for ${colName}:`, error);
+                setSyncStatus('offline');
+            });
+
+            unsubscribers.push(unsub);
+        }
+
+        setSyncStatus('synced');
+
+        // Cleanup listeners on unmount or logout
+        return () => {
+            console.log('[Sync] Cleaning up listeners');
+            unsubscribers.forEach(unsub => unsub());
+        };
     }, [currentUser, refreshData]);
 
     // Force push all local data to cloud (for initial sync or recovery)
@@ -350,6 +450,8 @@ export const DataProvider = ({ children }) => {
             id: crypto.randomUUID(), // Force UUID
             streak: 0,
             longestStreak: 0,
+            hearts: 3,
+            maxHearts: 3,
             createdAt: new Date(),
             updatedAt: new Date().toISOString()
         };
@@ -365,9 +467,6 @@ export const DataProvider = ({ children }) => {
 
         if (existing) {
             await db.delete('habit_logs', existing.id);
-            // We need to delete from cloud too. But habit_logs usually generic auto-inc ID.
-            // We should ideally use UUIDs for logs too if we want to sync them perfectly.
-            // For now, let's just create 'id' if missing when adding.
             if (existing.id) await syncItem('habit_logs', existing, true);
             await addXP(-habitXP);
         } else {
@@ -380,10 +479,11 @@ export const DataProvider = ({ children }) => {
             await db.add('habit_logs', newLog);
             await syncItem('habit_logs', newLog);
             await addXP(habitXP);
+            if (addHearts) await addHearts(1);
+            await addActivityLog({ type: 'habit_completed', icon: '💪', message: `Completed habit`, xpChange: habitXP });
         }
 
         const updatedLogs = await db.getAll('habit_logs');
-        // ... (Recalculate Streaks - existing logic) ...
         const thisHabitLogs = updatedLogs.filter(l => l.habitId === habitId);
         const sortedDates = thisHabitLogs.map(l => l.date).sort((a, b) => new Date(b) - new Date(a));
 
@@ -414,10 +514,29 @@ export const DataProvider = ({ children }) => {
 
         const habit = habits.find(h => h.id === habitId);
         if (habit) {
+            const currentHearts = habit.hearts ?? 3;
+            const maxH = habit.maxHearts || 3;
+            let newHearts = currentHearts;
+            let newStreak = streak;
+
+            // If streak dropped (user un-toggled or missed), deduct a heart
+            if (existing && streak < (habit.streak || 0)) {
+                newHearts = Math.max(0, currentHearts - 1);
+                if (newHearts <= 0) {
+                    // All hearts gone — streak breaks
+                    newStreak = 0;
+                    newHearts = 0;
+                    await addActivityLog({ type: 'habit_streak_broken', icon: '💔', message: `Lost streak on "${habit.title}" (no hearts left)`, xpChange: 0 });
+                } else {
+                    await addActivityLog({ type: 'habit_heart_lost', icon: '🖤', message: `Lost a heart on "${habit.title}" (${newHearts}/${maxH} left)`, xpChange: 0 });
+                }
+            }
+
             const updatedHabit = {
                 ...habit,
-                streak: streak,
-                longestStreak: Math.max(habit.longestStreak || 0, streak),
+                streak: newStreak,
+                hearts: newHearts,
+                longestStreak: Math.max(habit.longestStreak || 0, newStreak),
                 updatedAt: new Date().toISOString()
             };
             await db.put('habits', updatedHabit);
@@ -451,6 +570,7 @@ export const DataProvider = ({ children }) => {
         };
         await db.add('tasks', newTask);
         await syncItem('tasks', newTask);
+        await addActivityLog({ type: 'task_added', icon: '📋', message: `Added "${newTask.title}"`, xpChange: 0 });
         await refreshData();
         await checkAchievements([...tasks, newTask], habits);
     };
@@ -474,9 +594,14 @@ export const DataProvider = ({ children }) => {
         await syncItem('tasks', updatedTask);
 
         if (updatedTask.status === 'completed') {
-            await addXP(task.xpValue || 20);
+            const xp = task.xpValue || 20;
+            await addXP(xp);
+            if (addHearts) await addHearts(1);
+            await addActivityLog({ type: 'task_completed', icon: '✅', message: `Completed "${task.title}"`, xpChange: xp });
         } else {
-            await addXP(-(task.xpValue || 20));
+            const xp = task.xpValue || 20;
+            await addXP(-xp);
+            await addActivityLog({ type: 'task_uncompleted', icon: '↩️', message: `Uncompleted "${task.title}"`, xpChange: -xp });
         }
 
         await refreshData();
@@ -485,10 +610,45 @@ export const DataProvider = ({ children }) => {
         await checkAchievements(updatedTasks, habits);
     };
 
+    const skipTask = async (taskId) => {
+        const task = tasks.find(t => t.id === taskId);
+        if (!task) return;
+
+        const penalty = TASK_PENALTIES[task.priority] || TASK_PENALTIES.Low;
+
+        const updatedTask = {
+            ...task,
+            status: 'skipped',
+            skippedAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+        };
+
+        await db.put('tasks', updatedTask);
+        await syncItem('tasks', updatedTask);
+        await addXP(-penalty);
+        await addActivityLog({ type: 'task_skipped', icon: '📉', message: `Skipped "${task.title}"`, xpChange: -penalty, priority: task.priority });
+        await refreshData();
+    };
+
     const deleteTask = async (id) => {
         const task = tasks.find(t => t.id === id);
-        if (task && task.status === 'completed') {
-            await addXP(-(task.xpValue || 20));
+
+        if (task) {
+            if (task.status === 'completed') {
+                // Deleting a completed task removes its XP
+                await addXP(-(task.xpValue || 20));
+            } else if (task.dueDate) {
+                // Check if task is overdue and incomplete - apply penalty
+                const now = new Date();
+                const dueDate = new Date(task.dueDate);
+                if (dueDate < now) {
+                    // Import penalty config
+                    const { TASK_PENALTIES } = await import('../lib/penaltyConfig.js');
+                    const penalty = TASK_PENALTIES[task.priority] || TASK_PENALTIES.Low;
+                    console.log(`[Penalty] Task skipped: -${penalty} XP (${task.priority} priority)`);
+                    await addXP(-penalty);
+                }
+            }
         }
 
         if (user.activeTimer && user.activeTimer.taskId === id) {
@@ -579,6 +739,7 @@ export const DataProvider = ({ children }) => {
         await db.add('journal_entries', newEntry);
         await syncItem('journal_entries', newEntry);
         await addXP(15);
+        await addActivityLog({ type: 'journal_added', icon: '📝', message: `Added Journal Entry "${newEntry.title || 'Untitled'}"`, xpChange: 15 });
         await refreshData();
     };
 
@@ -586,6 +747,7 @@ export const DataProvider = ({ children }) => {
         const updatedEntry = { ...entry, updatedAt: new Date().toISOString() };
         await db.put('journal_entries', updatedEntry);
         await syncItem('journal_entries', updatedEntry);
+        await addActivityLog({ type: 'journal_edited', icon: '✏️', message: `Edited Journal Entry "${updatedEntry.title || 'Untitled'}"`, xpChange: 0 });
         await refreshData();
     };
 
@@ -704,7 +866,28 @@ export const DataProvider = ({ children }) => {
         };
         await db.add('reward_history', historyItem);
         await syncItem('reward_history', historyItem);
+        await addActivityLog({ type: 'reward_redeemed', icon: '🎁', message: `Bought "${reward.name}"`, xpChange: -reward.cost });
 
+        await refreshData();
+        return true;
+    };
+
+    const restoreHabitHearts = async (habitId, amount = 1) => {
+        const habit = habits.find(h => h.id === habitId);
+        if (!habit) return false;
+
+        const maxH = habit.maxHearts || 3;
+        const currentH = habit.hearts ?? maxH;
+        const newH = Math.min(currentH + amount, maxH);
+
+        const updatedHabit = {
+            ...habit,
+            hearts: newH,
+            updatedAt: new Date().toISOString()
+        };
+        await db.put('habits', updatedHabit);
+        await syncItem('habits', updatedHabit);
+        await addActivityLog({ type: 'heart_bought', icon: '❤️', message: `Restored heart for "${habit.title}"`, xpChange: -200 });
         await refreshData();
         return true;
     };
@@ -722,6 +905,7 @@ export const DataProvider = ({ children }) => {
         updateTask,
         toggleTask,
         deleteTask,
+        skipTask,
         reorderTasks,
         toggleSubtask,
         addGoal,
@@ -733,6 +917,7 @@ export const DataProvider = ({ children }) => {
         deleteHabit,
         toggleHabit,
         toggleHabitLog: toggleHabit,
+        restoreHabitHearts,
         addJournalEntry,
         updateJournalEntry,
         deleteJournalEntry,
@@ -754,10 +939,12 @@ export const DataProvider = ({ children }) => {
         addCalendarLayer,
         rewards,
         rewardHistory,
+        activityLogs,
         addReward,
         deleteReward,
         redeemReward,
         pushAllToCloud,
+        syncStatus,
         activeTimer: user.activeTimer || null,
         timerLogs,
         timerSettings: user.settings?.timer || { efficiency: 0.6, checkInInterval: 30 },

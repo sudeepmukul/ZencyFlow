@@ -5,6 +5,7 @@ import { Plus, Zap, ShoppingBag, Calendar } from 'lucide-react';
 import { HabitCard } from './components/HabitCard';
 import { HabitHeatMap } from './components/HabitHeatMap';
 import { AddHabitModal } from './components/AddHabitModal';
+import { MonthViewModal } from './components/MonthViewModal';
 import { SEOHead } from '../../components/seo/SEOHead';
 
 export function Habits() {
@@ -12,6 +13,7 @@ export function Habits() {
     const { user, spendXP, addInventoryItem } = useUser();
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingHabit, setEditingHabit] = useState(null);
+    const [monthViewHabit, setMonthViewHabit] = useState(null);
 
     // Helper to get YYYY-MM-DD in local time
     const getLocalDateString = (date) => {
@@ -116,6 +118,11 @@ export function Habits() {
         setIsModalOpen(true);
     };
 
+    // Handler for toggling habit from month view (receives date string directly)
+    const handleMonthViewToggle = async (habitId, dateStr) => {
+        await toggleHabit(habitId, dateStr);
+    };
+
     return (
         <>
             <SEOHead
@@ -130,6 +137,14 @@ export function Habits() {
                     onClose={() => setIsModalOpen(false)}
                     onAdd={handleSaveHabit}
                     initialData={editingHabit}
+                />
+
+                <MonthViewModal
+                    isOpen={!!monthViewHabit}
+                    onClose={() => setMonthViewHabit(null)}
+                    habit={monthViewHabit}
+                    habitLogs={habitLogs}
+                    onToggle={handleMonthViewToggle}
                 />
 
                 <div className="mx-auto max-w-4xl space-y-8">
@@ -189,6 +204,7 @@ export function Habits() {
                                         setEditingHabit(habit);
                                         setIsModalOpen(true);
                                     }}
+                                    onDoubleClick={() => setMonthViewHabit(habit)}
                                 />
                             ))}
                             {processedHabits.length === 0 && (

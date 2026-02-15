@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useData } from '../../contexts/DataContext';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Modal } from '../../components/ui/Modal';
 import { Input, Select } from '../../components/ui/Input';
-import { Plus, Trash2, Edit2, Search, Smile, Meh, Frown, Heart, CloudLightning } from 'lucide-react';
+import { Plus, Trash2, Edit2, Search, Smile, Meh, Frown, Heart, CloudLightning, X, ImagePlus } from 'lucide-react';
 import { format } from 'date-fns';
 import { SEOHead } from '../../components/seo/SEOHead';
 
@@ -16,12 +17,57 @@ const MOODS = [
     { label: 'Terrible', value: 'Terrible', icon: Frown, color: 'text-red-500' },
 ];
 
+// Helper to render content with inline images
+function renderContentWithImages(content) {
+    if (!content) return null;
+    // Split on ![...](data:...) markers
+    const parts = content.split(/(\!\[.*?\]\(data:.*?\))/g);
+    return parts.map((part, i) => {
+        const match = part.match(/\!\[(.*?)\]\((data:.*?)\)/);
+        if (match) {
+            return (
+                <img
+                    key={i}
+                    src={match[2]}
+                    alt={match[1] || 'Journal image'}
+                    className="max-w-full rounded-xl border border-zinc-800 my-4 shadow-lg"
+                />
+            );
+        }
+        // Render text with line breaks
+        return part.split('\n').map((line, j) => (
+            <React.Fragment key={`${i}-${j}`}>
+                {line}
+                {j < part.split('\n').length - 1 && <br />}
+            </React.Fragment>
+        ));
+    });
+}
+
 export function Journal() {
     const { journalEntries, addJournalEntry, updateJournalEntry, deleteJournalEntry } = useData();
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingEntry, setEditingEntry] = useState(null);
     const [searchTerm, setSearchTerm] = useState('');
     const [filterMood, setFilterMood] = useState('All Moods');
+    const [readingEntry, setReadingEntry] = useState(null);
+    const fileInputRef = useRef(null);
+    const readModalContentRef = useRef(null);
+
+    // Initial scroll reset and body lock for read mode
+    useEffect(() => {
+        if (readingEntry) {
+            document.body.style.overflow = 'hidden';
+            if (readModalContentRef.current) {
+                readModalContentRef.current.scrollTop = 0;
+            }
+        } else {
+            document.body.style.overflow = 'unset';
+        }
+        return () => {
+            document.body.style.overflow = 'unset';
+        };
+    }, [readingEntry]);
 
     const [formData, setFormData] = useState({
         title: '',
@@ -65,6 +111,35 @@ export function Journal() {
         if (window.confirm('Are you sure you want to delete this entry?')) {
             await deleteJournalEntry(id);
         }
+    };
+
+    const handleImageUpload = (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        // Validate file type and size
+        if (!file.type.startsWith('image/')) {
+            alert('Please select an image file');
+            return;
+        }
+        if (file.size > 5 * 1024 * 1024) {
+            alert('Image too large. Max 5MB.');
+            return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = () => {
+            const base64 = reader.result;
+            const marker = `\n![${file.name}](${base64})\n`;
+            setFormData(prev => ({
+                ...prev,
+                content: prev.content + marker
+            }));
+        };
+        reader.readAsDataURL(file);
+
+        // Reset input so same file can be selected again
+        if (fileInputRef.current) fileInputRef.current.value = '';
     };
 
     const filteredEntries = journalEntries
@@ -126,7 +201,11 @@ export function Journal() {
                 {/* Entries Grid */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     {filteredEntries.map(entry => (
-                        <Card key={entry.id} className="group relative flex flex-col h-full hover:border-neon-400/30 transition-colors">
+                        <Card
+                            key={entry.id}
+                            className="group relative flex flex-col h-full hover:border-neon-400/30 transition-colors cursor-pointer"
+                            onDoubleClick={() => setReadingEntry(entry)}
+                        >
                             <div className="flex justify-between items-start mb-3">
                                 <div>
                                     <div className="font-bold text-zinc-200">
@@ -137,10 +216,10 @@ export function Journal() {
                                     </div>
                                 </div>
                                 <div className="flex gap-1">
-                                    <button onClick={() => handleOpenModal(entry)} className="p-1.5 text-zinc-500 hover:text-blue-400 hover:bg-blue-400/10 rounded-md transition-colors">
+                                    <button onClick={(e) => { e.stopPropagation(); handleOpenModal(entry); }} className="p-1.5 text-zinc-500 hover:text-blue-400 hover:bg-blue-400/10 rounded-md transition-colors">
                                         <Edit2 className="w-4 h-4" />
                                     </button>
-                                    <button onClick={() => handleDelete(entry.id)} className="p-1.5 text-zinc-500 hover:text-red-500 hover:bg-red-500/10 rounded-md transition-colors">
+                                    <button onClick={(e) => { e.stopPropagation(); handleDelete(entry.id); }} className="p-1.5 text-zinc-500 hover:text-red-500 hover:bg-red-500/10 rounded-md transition-colors">
                                         <Trash2 className="w-4 h-4" />
                                     </button>
                                 </div>
@@ -150,13 +229,24 @@ export function Journal() {
                                 {entry.title || 'Untitled Entry'}
                             </h3>
 
+                            {/* Image Preview */}
+                            {(() => {
+                                const firstImage = entry.content?.match(/\!\[.*?\]\((data:.*?)\)/)?.[1];
+                                return firstImage ? (
+                                    <div className="mb-3 h-32 w-full overflow-hidden rounded-xl border border-zinc-800/50">
+                                        <img src={firstImage} alt="Preview" className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105" />
+                                    </div>
+                                ) : null;
+                            })()}
+
                             <p className="text-zinc-400 text-sm leading-relaxed line-clamp-3 mb-4 flex-1">
-                                {entry.content}
+                                {entry.content?.replace(/\!\[.*?\]\(data:.*?\)/g, '').trim() || 'No content...'}
                             </p>
 
                             <div className="flex items-center gap-2 pt-3 border-t border-zinc-800/50 mt-auto">
                                 {getMoodIcon(entry.mood)}
                                 <span className="text-xs text-zinc-400 font-medium">{entry.mood || 'Neutral'}</span>
+                                <span className="text-[10px] text-zinc-600 ml-auto">Double-click to read</span>
                             </div>
                         </Card>
                     ))}
@@ -166,6 +256,68 @@ export function Journal() {
                         </div>
                     )}
                 </div>
+
+                {/* Read Mode Overlay */}
+                {readingEntry && createPortal(
+                    <div
+                        className="fixed inset-0 z-[9999] bg-black/90 backdrop-blur-md flex items-center justify-center p-4 md:p-8"
+                        onClick={() => setReadingEntry(null)}
+                        onKeyDown={(e) => e.key === 'Escape' && setReadingEntry(null)}
+                    >
+                        <div
+                            ref={readModalContentRef}
+                            className="relative bg-[#0a0a0a] border border-zinc-800 rounded-2xl max-w-2xl w-full max-h-[85vh] overflow-y-auto custom-scrollbar p-8 md:p-12 shadow-2xl"
+                            onClick={(e) => e.stopPropagation()}
+                        >
+                            {/* Close button */}
+                            <button
+                                onClick={() => setReadingEntry(null)}
+                                className="absolute top-4 right-4 p-2 text-zinc-500 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors"
+                            >
+                                <X className="w-5 h-5" />
+                            </button>
+
+                            {/* Mood indicator */}
+                            <div className="flex items-center gap-2 mb-6">
+                                {getMoodIcon(readingEntry.mood)}
+                                <span className="text-xs text-zinc-400 font-medium uppercase tracking-wider">{readingEntry.mood || 'Neutral'}</span>
+                            </div>
+
+                            {/* Date */}
+                            <div className="mb-2">
+                                <span className="text-sm text-zinc-500 font-medium">
+                                    {format(new Date(readingEntry.date), 'EEEE, MMMM d, yyyy')}
+                                </span>
+                            </div>
+
+                            {/* Title */}
+                            <h2 className="text-3xl md:text-4xl font-bold text-white mb-8 leading-tight">
+                                {readingEntry.title || 'Untitled Entry'}
+                            </h2>
+
+                            {/* Divider */}
+                            <div className="w-12 h-0.5 bg-[#FBFF00]/40 mb-8 rounded-full" />
+
+                            {/* Content with rendered images */}
+                            <div className="text-zinc-300 text-base leading-relaxed font-light tracking-wide">
+                                {renderContentWithImages(readingEntry.content)}
+                            </div>
+
+                            {/* Bottom actions */}
+                            <div className="mt-10 pt-6 border-t border-zinc-800/50 flex items-center gap-3">
+                                <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    className="text-zinc-500 hover:text-blue-400"
+                                    onClick={() => { setReadingEntry(null); handleOpenModal(readingEntry); }}
+                                >
+                                    <Edit2 className="w-4 h-4 mr-1" /> Edit
+                                </Button>
+                            </div>
+                        </div>
+                    </div>,
+                    document.body
+                )}
 
                 <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={editingEntry ? "Edit Entry" : "New Journal Entry"}>
                     <form onSubmit={handleSubmit} className="space-y-4">
@@ -203,7 +355,24 @@ export function Journal() {
                         </div>
 
                         <div>
-                            <label className="block text-sm font-medium text-zinc-400 mb-1">Entry</label>
+                            <div className="flex items-center justify-between mb-1">
+                                <label className="block text-sm font-medium text-zinc-400">Entry</label>
+                                <button
+                                    type="button"
+                                    onClick={() => fileInputRef.current?.click()}
+                                    className="flex items-center gap-1 text-xs text-zinc-500 hover:text-[#FBFF00] transition-colors px-2 py-1 rounded-md hover:bg-[#FBFF00]/10"
+                                >
+                                    <ImagePlus className="w-3.5 h-3.5" />
+                                    Add Image
+                                </button>
+                                <input
+                                    ref={fileInputRef}
+                                    type="file"
+                                    accept="image/*"
+                                    className="hidden"
+                                    onChange={handleImageUpload}
+                                />
+                            </div>
                             <textarea
                                 required
                                 rows={10}

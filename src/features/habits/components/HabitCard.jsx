@@ -2,12 +2,17 @@ import React from 'react';
 import { Flame, Trophy, Edit2, Trash2 } from 'lucide-react';
 import { DayBlock } from './DayBlock';
 import { ConsistencyStrip } from './ConsistencyStrip';
+import { PixelHeart } from './PixelHeart';
 
-export const HabitCard = ({ habit, onToggle, onEdit, onDelete }) => {
+export const HabitCard = ({ habit, onToggle, onEdit, onDelete, onDoubleClick }) => {
     const completedCount = habit.weekStatus.filter(Boolean).length;
     const progressPercent = (completedCount / 7) * 100;
+    const hearts = habit.hearts ?? 3;
+    const maxHearts = habit.maxHearts || 3;
 
     const getMotivation = () => {
+        if (hearts <= 0) return "Streak broken 💔";
+        if (hearts === 1) return "Last heart! ⚠️";
         if (habit.streak > 10) return "Unstoppable! 🔥";
         if (habit.streak > 3) return "Great momentum!";
         if (completedCount === 7) return "Perfect Week!";
@@ -15,7 +20,10 @@ export const HabitCard = ({ habit, onToggle, onEdit, onDelete }) => {
     };
 
     return (
-        <div className="group relative overflow-hidden rounded-3xl border border-white/5 bg-[#1A1A1A] p-6 transition-all duration-300 hover:border-[#FBFF00]/20 hover:bg-[#202020] hover:shadow-[0_0_40px_-10px_rgba(251,255,0,0.1)]">
+        <div
+            className="group relative overflow-hidden rounded-3xl border border-white/5 bg-[#1A1A1A] p-6 transition-all duration-300 hover:border-[#FBFF00]/20 hover:bg-[#202020] hover:shadow-[0_0_40px_-10px_rgba(251,255,0,0.1)] cursor-pointer"
+            onDoubleClick={onDoubleClick}
+        >
             <div className="pointer-events-none absolute -right-20 -top-20 h-64 w-64 rounded-full bg-[#FBFF00]/5 blur-3xl transition-opacity duration-500 group-hover:opacity-100 opacity-0" />
 
             <div className="relative z-10 mb-6 flex items-start justify-between">
@@ -65,6 +73,14 @@ export const HabitCard = ({ habit, onToggle, onEdit, onDelete }) => {
                 </div>
             </div>
 
+            {/* Pixel Hearts (Minecraft-style) */}
+            <div className="relative z-10 mb-4 flex items-center gap-1">
+                {Array.from({ length: maxHearts }).map((_, i) => (
+                    <PixelHeart key={i} filled={i < hearts} size={20} />
+                ))}
+                <span className="ml-2 text-xs text-zinc-500 font-medium">{hearts}/{maxHearts}</span>
+            </div>
+
             <div className="relative z-10 mb-6 flex justify-between gap-2">
                 {['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'].map((day, index) => {
                     const currentDayIndex = (new Date().getDay() + 6) % 7;
@@ -93,3 +109,4 @@ export const HabitCard = ({ habit, onToggle, onEdit, onDelete }) => {
         </div>
     );
 };
+

@@ -1,17 +1,29 @@
 import React, { useState } from 'react';
 import { useData } from '../../contexts/DataContext';
 import { useUser } from '../../contexts/UserContext';
-import { Plus, Gift, History, Lock, Unlock, TrendingUp, Sparkles, Trash2, Smartphone, Gamepad2, Coffee, ShoppingBag } from 'lucide-react';
+import { Plus, Gift, History, Lock, Unlock, TrendingUp, Sparkles, Trash2, Smartphone, Gamepad2, Coffee, ShoppingBag, Heart } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { CreateRewardModal } from './CreateRewardModal';
 import confetti from 'canvas-confetti';
 import { SEOHead } from '../../components/seo/SEOHead';
+import { PixelHeart } from '../habits/components/PixelHeart';
 
 export function Rewards() {
-    const { rewards, addReward, deleteReward, redeemReward, rewardHistory } = useData();
+    const { rewards, addReward, deleteReward, redeemReward, rewardHistory, habits, restoreHabitHearts } = useData();
     const { user } = useUser();
     const [isModalOpen, setIsModalOpen] = useState(false);
-    const [activeTab, setActiveTab] = useState('shop'); // shop, unlocks, history
+    const [activeTab, setActiveTab] = useState('shop'); // shop, unlocks, hearts, history
+
+    const handleBuyHeart = async (habitId) => {
+        const HEART_COST = 200;
+        if (user.xp < HEART_COST) {
+            alert('Not enough XP! You need 200 XP to restore a heart.');
+            return;
+        }
+        await redeemReward({ id: `heart_${habitId}_${Date.now()}`, name: 'Habit Heart', cost: HEART_COST, icon: '❤️', category: 'Hearts' });
+        await restoreHabitHearts(habitId, 1);
+        confetti({ particleCount: 80, spread: 60, origin: { y: 0.6 }, colors: ['#ef4444', '#dc2626', '#fca5a5'] });
+    };
 
     const handleRedeem = async (reward) => {
         if (user.xp < reward.cost) {
@@ -112,6 +124,13 @@ export function Rewards() {
                         >
                             History
                             {activeTab === 'history' && <motion.div layoutId="activeTab" className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#FBFF00]" />}
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('hearts')}
+                            className={`pb-3 px-2 text-sm font-bold uppercase tracking-wider transition-all relative ${activeTab === 'hearts' ? 'text-white' : 'text-zinc-500 hover:text-zinc-300'}`}
+                        >
+                            ❤️ Hearts
+                            {activeTab === 'hearts' && <motion.div layoutId="activeTab" className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#FBFF00]" />}
                         </button>
                     </div>
 
@@ -280,9 +299,70 @@ export function Rewards() {
                                 )}
                             </motion.div>
                         )}
+
+                        {/* HEARTS TAB */}
+                        {activeTab === 'hearts' && (
+                            <motion.div
+                                key="hearts"
+                                initial={{ opacity: 0, y: 10 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0, y: -10 }}
+                                className="space-y-6"
+                            >
+                                <div className="text-center py-4">
+                                    <h3 className="text-lg font-bold text-white">Restore Habit Hearts</h3>
+                                    <p className="text-sm text-zinc-500 mt-1">Spend 200 XP to restore one heart for a habit</p>
+                                </div>
+
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    {habits.map(habit => {
+                                        const hearts = habit.hearts ?? 3;
+                                        const maxHearts = habit.maxHearts || 3;
+                                        const needsHearts = hearts < maxHearts;
+
+                                        return (
+                                            <div key={habit.id} className={`flex items-center justify-between p-5 rounded-2xl border transition-all ${needsHearts ? 'bg-zinc-900/80 border-red-900/30 hover:border-red-500/50' : 'bg-zinc-900/50 border-white/5'
+                                                }`}>
+                                                <div className="flex items-center gap-4">
+                                                    <div className="text-2xl">{habit.icon}</div>
+                                                    <div>
+                                                        <h4 className="font-bold text-white text-sm">{habit.title}</h4>
+                                                        <div className="flex items-center gap-1 mt-1">
+                                                            {Array.from({ length: maxHearts }).map((_, i) => (
+                                                                <PixelHeart key={i} filled={i < hearts} size={16} />
+                                                            ))}
+                                                            <span className="text-[10px] text-zinc-500 ml-1">{hearts}/{maxHearts}</span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                {needsHearts ? (
+                                                    <button
+                                                        onClick={() => handleBuyHeart(habit.id)}
+                                                        className={`px-4 py-2 rounded-xl font-bold text-sm transition-all flex items-center gap-2 ${user.xp >= 200
+                                                            ? 'bg-red-500 text-white hover:bg-red-600 shadow-[0_0_15px_rgba(239,68,68,0.3)]'
+                                                            : 'bg-zinc-800 text-zinc-500 cursor-not-allowed'
+                                                            }`}
+                                                        disabled={user.xp < 200}
+                                                    >
+                                                        <Heart size={14} /> 200 XP
+                                                    </button>
+                                                ) : (
+                                                    <span className="text-xs text-emerald-400 font-bold px-3 py-1 bg-emerald-400/10 rounded-full">Full ✓</span>
+                                                )}
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+
+                                {habits.length === 0 && (
+                                    <div className="text-center py-12 text-zinc-500">No habits yet. Create some habits first!</div>
+                                )}
+                            </motion.div>
+                        )}
                     </AnimatePresence>
                 </div>
-            </div>
+            </div >
         </>
     );
 }

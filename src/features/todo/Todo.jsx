@@ -209,7 +209,7 @@ export function Todo() {
 
             const taskDate = new Date(t.dueDate);
 
-            // Check if original due date matches
+            // Check if original due date matches EXACTLY
             if (isSameDay(taskDate, viewDate)) return true;
 
             // Check if this is a repeat day (and not excluded)
@@ -223,8 +223,8 @@ export function Todo() {
                 return true;
             }
 
-            // If viewing today, show overdue
-            if (isSameDay(viewDate, new Date()) && taskDate < new Date().setHours(0, 0, 0, 0)) return true;
+            // REMOVED: Automatic overdue inclusion
+            // if (isSameDay(viewDate, new Date()) && taskDate < new Date().setHours(0, 0, 0, 0)) return true;
 
             return false;
         })

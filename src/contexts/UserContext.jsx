@@ -6,6 +6,7 @@ import { useXP } from '../hooks/useXP';
 import confetti from 'canvas-confetti';
 import { useToast } from './ToastContext';
 import { useAuth } from './AuthContext';
+import { HEARTS_REWARDS } from '../lib/penaltyConfig';
 
 const UserContext = createContext();
 
@@ -13,6 +14,7 @@ export const UserProvider = ({ children }) => {
     const [user, setUser] = useState({
         xp: 0,
         level: 0,
+        hearts: 0,
         name: 'Zen Master',
         settings: {}
     });
@@ -145,6 +147,7 @@ export const UserProvider = ({ children }) => {
                             id: 'profile',
                             xp: 0,
                             level: 0,
+                            hearts: 0,
                             name: currentUser?.displayName || 'Zen Master',
                             photoURL: currentUser?.photoURL || null,
                             settings: { theme: 'neon' },
@@ -161,6 +164,7 @@ export const UserProvider = ({ children }) => {
                         id: 'profile',
                         xp: 0,
                         level: 0,
+                        hearts: 0,
                         name: currentUser?.displayName || 'Zen Master (Offline)',
                         photoURL: currentUser?.photoURL || null,
                         settings: { theme: 'neon' },
@@ -214,6 +218,9 @@ export const UserProvider = ({ children }) => {
                 colors: ['#a855f7', '#ec4899', '#eab308', '#22c55e']
             });
 
+            // Award bonus hearts on level up
+            await addHearts(HEARTS_REWARDS.levelUp);
+
             return { leveledUp: true, newLevel };
         }
     };
@@ -223,6 +230,26 @@ export const UserProvider = ({ children }) => {
             updateProfile({ xp: user.xp - amount });
             return true;
         }
+        return false;
+    };
+
+    // Hearts System
+    const addHearts = async (amount) => {
+        const newHearts = (user.hearts || 0) + amount;
+        await updateProfile({ hearts: newHearts });
+        if (amount > 0) {
+            addToast("Hearts Earned! ❤️", `+${amount} Hearts`, "success");
+        }
+        return newHearts;
+    };
+
+    const spendHearts = async (amount) => {
+        if ((user.hearts || 0) >= amount) {
+            await updateProfile({ hearts: (user.hearts || 0) - amount });
+            addToast("Hearts Spent ❤️", `-${amount} Hearts`, "info");
+            return true;
+        }
+        addToast("Not Enough Hearts", `You need ${amount} Hearts`, "error");
         return false;
     };
 
@@ -355,6 +382,8 @@ export const UserProvider = ({ children }) => {
         nextLevelXP: calculateNextLevelXP(user.level),
         isLoading,
         spendXP,
+        addHearts,
+        spendHearts,
         addInventoryItem,
         useInventoryItem,
         unlockBadge,

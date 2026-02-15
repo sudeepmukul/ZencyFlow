@@ -256,6 +256,9 @@ export function ZenciaWidget({ user, todayScore, nextLevelXP }) {
                             <div className="flex items-baseline gap-2 mb-1">
                                 <h2 className="text-xl md:text-2xl font-bold text-white tracking-tight">Level {user.level}</h2>
                                 <span className="text-xs font-mono text-gray-500">{user.xp} / {nextLevelXP} XP</span>
+                                <span className="text-xs font-mono text-red-400 flex items-center gap-0.5">
+                                    <span className="text-red-500">❤️</span> {user.hearts || 0}
+                                </span>
                             </div>
 
                             {/* XP Bar - Updated Gradient to NEON YELLOW */}

@@ -1,7 +1,11 @@
 // Notification Manager with scheduling capabilities
 // Uses browser's Notification API with timeout-based scheduling
+// Enhanced with Firebase Cloud Messaging (FCM) for push notifications
+
+import { getMessagingInstance } from './firebase';
 
 const scheduledNotifications = new Map();
+let fcmToken = null;
 
 export const NotificationManager = {
     // Request permission for browser notifications
@@ -12,15 +16,51 @@ export const NotificationManager = {
         }
 
         if (Notification.permission === "granted") {
+            // Also try to get FCM token
+            await NotificationManager.getFCMToken();
             return true;
         }
 
         if (Notification.permission !== "denied") {
             const permission = await Notification.requestPermission();
-            return permission === "granted";
+            if (permission === "granted") {
+                // Get FCM token after permission granted
+                await NotificationManager.getFCMToken();
+                return true;
+            }
         }
 
         return false;
+    },
+
+    // Get FCM token for push notifications
+    getFCMToken: async () => {
+        try {
+            const fcm = await getMessagingInstance();
+            if (!fcm) {
+                console.log("[Notifications] FCM not available");
+                return null;
+            }
+
+            // Get service worker registration
+            const registration = await navigator.serviceWorker.ready;
+
+            fcmToken = await fcm.getToken(fcm.messaging, {
+                vapidKey: undefined, // Add your VAPID key here if you have one
+                serviceWorkerRegistration: registration
+            });
+
+            if (fcmToken) {
+                console.log("[Notifications] FCM Token obtained:", fcmToken.substring(0, 20) + "...");
+                // Store token for later use (e.g., send to backend)
+                localStorage.setItem('fcmToken', fcmToken);
+            }
+
+            return fcmToken;
+        } catch (error) {
+            console.log("[Notifications] FCM token error:", error.message);
+            return null;
+        }
     },
 
     // Check if notifications are enabled
@@ -28,9 +68,8 @@ export const NotificationManager = {
         return "Notification" in window && Notification.permission === "granted";
     },
 
-    // Send an immediate notification
-    // force: skip permission check (used right after granting permission)
-    send: (title, options = {}, force = false) => {
+    // Send an immediate notification using service worker when available
+    send: async (title, options = {}, force = false) => {
         console.log(`[Notifications] send() called: "${title}", force=${force}, permission=${Notification?.permission}`);
 
         if (!force && !NotificationManager.isEnabled()) {
@@ -39,15 +78,31 @@ export const NotificationManager = {
         }
 
         try {
+            // Try to use service worker for persistent notifications
+            if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+                const registration = await navigator.serviceWorker.ready;
+                await registration.showNotification(title, {
+                    icon: '/favicon.svg',
+                    badge: '/favicon.svg',
+                    tag: options.tag || undefined,
+                    requireInteraction: options.requireInteraction || false,
+                    body: options.body,
+                    data: options.data
+                });
+                console.log("[Notifications] Service Worker notification sent");
+                return true;
+            }
+
+            // Fallback to browser Notification API
             const notification = new Notification(title, {
                 icon: '/favicon.svg',
                 badge: '/favicon.svg',
-                tag: options.tag || undefined, // Prevents duplicate notifications with same tag
+                tag: options.tag || undefined,
                 requireInteraction: options.requireInteraction || false,
                 ...options
             });
 
-            console.log("[Notifications] Notification created successfully");
+            console.log("[Notifications] Browser notification created");
 
             notification.onclick = () => {
                 window.focus();
@@ -150,5 +205,10 @@ export const NotificationManager = {
         }
         scheduledNotifications.clear();
         console.log("[Notifications] Cleared all scheduled notifications");
+    },
+
+    // Get stored FCM token
+    getStoredToken: () => {
+        return fcmToken || localStorage.getItem('fcmToken');
     }
 };

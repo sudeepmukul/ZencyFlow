@@ -17,6 +17,23 @@ export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
 export const db = getFirestore(app);
 
+// Firebase Cloud Messaging for push notifications
+// Lazy-loaded to avoid issues in SSR/non-browser contexts
+export const getMessagingInstance = async () => {
+    if (typeof window === 'undefined' || !('serviceWorker' in navigator)) {
+        return null;
+    }
+    try {
+        const { getMessaging, getToken, onMessage } = await import('firebase/messaging');
+        const messaging = getMessaging(app);
+        console.log('[Firebase] Messaging initialized');
+        return { messaging, getToken, onMessage };
+    } catch (error) {
+        console.log('[Firebase] Messaging not available:', error.message);
+        return null;
+    }
+};
+
 // Enable Offline Persistence (The "Native" Offline Mode)
 enableIndexedDbPersistence(db).catch((err) => {
     if (err.code == 'failed-precondition') {
