@@ -439,9 +439,9 @@ export function MasterCalendar() {
                     ref={contextMenuRef}
                     className="fixed z-50 bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl py-2 min-w-[160px] animate-in fade-in zoom-in-95 duration-150"
                     style={{
-                        left: `${contextMenu.x}px`,
                         top: `${contextMenu.y}px`,
-                        transform: 'translate(-50%, 8px)'
+                        left: `${contextMenu.x > window.innerWidth - 180 ? contextMenu.x - 170 : contextMenu.x}px`,
+                        transform: 'translate(0, 8px)'
                     }}
                 >
                     <button
