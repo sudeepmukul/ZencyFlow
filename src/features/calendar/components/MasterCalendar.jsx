@@ -440,7 +440,8 @@ export function MasterCalendar() {
                     className="fixed z-50 bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl py-2 min-w-[160px] animate-in fade-in zoom-in-95 duration-150"
                     style={{
                         top: `${contextMenu.y}px`,
-                        left: `${contextMenu.x > window.innerWidth - 180 ? contextMenu.x - 170 : contextMenu.x}px`,
+                        left: contextMenu.x > window.innerWidth - 250 ? 'auto' : `${contextMenu.x}px`,
+                        right: contextMenu.x > window.innerWidth - 250 ? `${window.innerWidth - contextMenu.x}px` : 'auto',
                         transform: 'translate(0, 8px)'
                     }}
                 >
